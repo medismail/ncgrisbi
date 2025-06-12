@@ -2,7 +2,7 @@
 <info>
   <id>ncgrisbi</id>
   <name>NCGrisbi</name>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <summary>Nextcloud Grisbi Account Manager.</summary>
   <description><![CDATA[# Nextcloud Grisbi Account Manager:
 - * Open gsb file
@@ -10,7 +10,7 @@
 - * Show Transactions
 - * Support Encryption
 - * and many others useful tools.]]></description>
-  <license>AGPL-3.0-only</license>
+  <licence>AGPL-3.0-only</licence>
   <author mail="imejri@hotmail.com">Moahmed-Ismail MEJRI</author>
   <website>https://github.com/medismail/ncgrisbi</website>
   <bugs>https://github.com/medismail/ncgrisbi/issues</bugs>
