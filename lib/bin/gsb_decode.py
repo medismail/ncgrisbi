@@ -124,7 +124,7 @@ def decrypt_v2(password, file_content):
         exit()
 
     # Copy the decrypted data to a final buffer, leaving out the second marker
-    output_buf = decrypted_buf[V2_MARKER_SIZE:]
+    output_buf = decrypted_buf[V2_MARKER_SIZE:].rstrip(b'\x00')
 
     return output_buf
 
