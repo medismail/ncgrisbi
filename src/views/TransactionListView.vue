@@ -44,7 +44,6 @@
         </thead>
         <tbody>
           <tr
-          <tr
             v-for="(transaction, index) in transactions.transactions.slice().reverse()"
             :key="index"
             :class="{ 'even-row': index % 2 === 0, 'odd-row': index % 2!== 0 }"

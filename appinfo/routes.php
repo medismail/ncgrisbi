@@ -10,7 +10,7 @@ return [
 
         // API endpoints
         ['name' => 'api#get_accounts', 'url' => '/api/accounts', 'verb' => 'POST'],
-        ['name' => 'api#get_transactions', 'url' => '/api/transactions/{accountId}', 'verb' => 'POST'],
+        ['name' => 'api#get_transactions', 'url' => '/api/account/{accountId}', 'verb' => 'POST'],
         ['name' => 'api#check_encrypted', 'url' => '/api/checkencrypted', 'verb' => 'GET'],
     ]
 ];
