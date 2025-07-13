@@ -31,6 +31,26 @@ class ApiController extends Controller {
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
+    public function getParties(string $filePath, string $filePassword): JSONResponse {
+        if (Helper::pythonInstalled()) {
+            $rootFolder = \OC::$server->getRootFolder();
+            $storageHandle = new StorageHandle($rootFolder);
+            $contents = $storageHandle->readFile($this->userId, $filePath);
+            $process = new GrisbiProcess();
+            $process->setPassword($filePassword);
+            $parties = json_decode($process->getParties($contents), true);
+            return new JSONResponse($parties);
+        }
+        return new JSONResponse([]); // Return an empty array if Python is not installed
+    }
+
+    /**
+     * @param string $filePath
+     * @param string $filePassword
+     *
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function getAccounts(string $filePath, string $filePassword): JSONResponse {
         if (Helper::pythonInstalled()) {
             /*$retval = null;
@@ -85,5 +105,26 @@ class ApiController extends Controller {
             return new JSONResponse($accounts);
         }
         return new JSONResponse('');
+    }
+
+    /**
+     * @param string $filePath
+     * @param string $filePassword
+     * @param string $transactionDataJson
+     *
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    public function saveTransaction(string $filePath, string $filePassword, string $transactionDataJson): JSONResponse {
+        if (Helper::pythonInstalled()) {
+            $rootFolder = \OC::$server->getRootFolder();
+            $storageHandle = new StorageHandle($rootFolder);
+            $contents = $storageHandle->readFile($this->userId, $filePath);
+            $process = new GrisbiProcess();
+            $process->setPassword($filePassword);
+            $output = $process->run(['--add-transaction', '--transaction-data', $transactionDataJson, '-'], $contents);
+            return new JSONResponse(['success' => true, 'output' => $output]); // You might want to return a more structured response
+        }
+        return new JSONResponse(['success' => false, 'message' => 'Python not installed']);
     }
 }

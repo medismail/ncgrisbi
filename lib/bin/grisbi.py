@@ -23,6 +23,17 @@ def parse_gsb_content(file_content):
 
     return root
 
+def find_transaction_by_number(root, transaction_number):
+    """Find a transaction element by its 'Nb' attribute."""
+    if transaction_number is None:
+        return None
+    for transaction in root.findall('.//Transaction'):
+        if transaction.get('Nb') == str(transaction_number):
+            return transaction
+    return None
+
+
+
 
 #{"Ac":"8","Nb":"2685","Id":"(null)","Dt":"06/25/2022","Dv":"(null)","Cu":"1","Am":"1000.00","Exb":"0","Exr":"0.00","Exf":"0.00","Pa":"190","Ca":"0","Sca":"0","Br":"0","No":"(null)","Pn":"0","Pc":"(null)","Ma":"0","Ar":"0","Au":"0","Re":"0","Fi":"0","Bu":"0","Sbu":"0","Vo":"(null)","Ba":"(null)","Trt":"0","Mo":"0"}
 def add_transaction(root, transaction_data):
@@ -256,8 +267,16 @@ if __name__ == "__main__":
             logging.error(f"Error decoding transaction data: {e}")
             exit(1)
 
-        add_transaction(root, transaction_data)
-        logging.info("Transaction added successfully.")
+        transaction_number = transaction_data.get('Transaction Number')
+        existing_transaction = find_transaction_by_number(root, transaction_number)
+
+        if existing_transaction is not None:
+            for key, value in transaction_data.items():
+                existing_transaction.set(key, str(value)) # Ensure value is a string for XML attribute
+            logging.info(f"Transaction {transaction_number} updated successfully.")
+        else:
+            add_transaction(root, transaction_data)
+            logging.info("New transaction added successfully.")
 
         # Write the updated XML back to the file
         file_content = write_gsb_content(root)

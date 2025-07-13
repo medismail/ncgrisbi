@@ -43,24 +43,41 @@
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="(transaction, index) in transactions.transactions.slice().reverse()"
+          <tr v-for="(transaction, index) in transactions.transactions.slice().reverse()"
             :key="index"
-            :class="{ 'even-row': index % 2 === 0, 'odd-row': index % 2!== 0 }"
+            :class="{ 'even-row': index % 2 === 0, 'odd-row': index % 2!== 0, 'bright-row': !transaction.isEditing }"
           >
             <td><strong>{{ transaction['Transaction Number'] }}</strong></td>
             <td><input type="text" v-model="transaction.Date" :disabled="!transaction.isEditing" /></td>
             <td><input type="number" v-model="transaction.Amount" :disabled="!transaction.isEditing" /></td>
-            <td><input type="text" v-model="transaction.Party" :disabled="!transaction.isEditing" /></td>
+            <td>
+              <select v-model="transaction.Party" :disabled="!transaction.isEditing">
+                <option v-for="party in parties" :key="party.id" :value="party.name">{{ party.name }}</option>
+              </select>
+            </td>
+            <td><strong>{{ transaction['Transaction Number'] }}</strong></td>
+            <td><input type="text" v-model="transaction.Date" :disabled="!transaction.isEditing" /></td>
+            <td><input type="number" v-model="transaction.Amount" :disabled="!transaction.isEditing" /></td>
+                <option v-for="party in parties" :key="party.id" :value="party.name">{{ party.name }}</option>
+              </select>
+            </td>
             <td><input type="text" v-model="transaction.Category" :disabled="!transaction.isEditing" /> (<input type="text" v-model="transaction.Subcategory" :disabled="!transaction.isEditing" />)</td>
             <td><input type="text" v-model="transaction['Payment Method']" :disabled="!transaction.isEditing" /></td>
             <td><input type="text" v-model="transaction.Note" :disabled="!transaction.isEditing" /></td>
-            <td><input type="checkbox" v-model="transaction.Marked" :disabled="!transaction.isEditing" /></td>
-            <td><input type="text" v-model="transaction['Bank Reference']" :disabled="!transaction.isEditing" /></td>
+            <td><input type="checkbox" :checked="transaction.Marked === 1" @change="transaction.Marked = $event.target.checked ? 1 : 0" :disabled="!transaction.isEditing" /></td>
+            <td>
+ <input
+ type="text"
+ :value="transaction['Bank Reference']"
+ @input="event => transaction['Bank Reference'] = event.target.value"
+ :disabled="!transaction.isEditing"
+ />
+ </td>
+
             <td><input type="checkbox" v-model="transaction['Split Transaction']" :disabled="!transaction.isEditing" /></td>
             <td>
               <button v-if="!transaction.isEditing" @click="transaction.isEditing = true">Edit</button>
-              <button v-else @click="transaction.isEditing = false">Save</button>
+              <button v-else @click="saveTransaction(transaction)">Save</button>
             </td>
           </tr>
         </tbody>
@@ -79,13 +96,14 @@ import { formatCurrency } from '@/utils/format'
 import { useStore } from 'vuex'
 import { useRoute } from 'vue-router'
 import { getLanguage } from '@nextcloud/l10n'
-
+import { computed } from 'vue'
 const store = useStore()
 const route = useRoute()
 const transactions = ref({})
 const loading = ref(true)
 const selectedAccountId = ref(route.params.id)
 const languageCode = ref('en')
+const parties = ref([])
 
 // Fetch transactions from API
 const fetchTransactions = async () => {
@@ -117,7 +135,28 @@ const fetchTransactions = async () => {
   loading.value = false
 }
 
+// Fetch parties from API
+const fetchParties = async () => {
+  const data = { filePath: store.state.filePath, filePassword: store.state.filePassword };
+  const jsonData = JSON.stringify(data);
+  const requestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: jsonData,
+  };
+  try {
+    const response = await fetch('/apps/ncgrisbi/api/parties', requestOptions);
+    const data = await response.json();
+    parties.value = data;
+  } catch (error) {
+    console.error('Failed to fetch parties:', error);
+  }
+};
+
 // Call fetchTransactions function when component is mounted
+onMounted(fetchParties);
 onMounted(fetchTransactions)
 
 // Watch for changes to route.params.id and refetch transactions if it changes
@@ -125,6 +164,31 @@ watch(() => route.params.id, (newId) => {
   selectedAccountId.value = newId
   fetchTransactions()
 })
+
+const saveTransaction = async (transaction) => {
+  const data = {
+    filePath: store.state.filePath,
+    filePassword: store.state.filePassword,
+    transactionDataJson: JSON.stringify(transaction), // Send the transaction object as a JSON string
+  };
+
+  const requestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  };
+
+  try {
+    const response = await fetch('/apps/ncgrisbi/api/savetransaction', requestOptions);
+    if (response.ok) {
+      transaction.isEditing = false; // Exit edit mode on successful save
+    }
+  } catch (error) {
+    console.error('Failed to save transaction:', error);
+  }
+};
 
 const addNewTransaction = () => {
   const newTransaction = {
@@ -137,7 +201,7 @@ const addNewTransaction = () => {
     'Payment Method': '',
     Note: '',
     Marked: false,
-    'Bank Reference': '',
+    'Bank Reference': null,
     'Split Transaction': false,
     isEditing: true // New transactions are in edit mode by default
   }
@@ -163,18 +227,5 @@ const addNewTransaction = () => {
 }
 
 .transaction-table tr td:nth-child(3) {
-  text-align: right;
-}
-
-/*.transaction-table th {
-  background-color: #f0f0f0;
-}
-
-.even-row {
-  background-color: #f9f9f9;
-}
-
-.odd-row {
-  background-color: #fff;
-}*/
+ text-align: right;
 </style>
