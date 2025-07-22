@@ -4,6 +4,9 @@ import gsb_decode
 import logging
 import argparse
 import sys
+from io import BytesIO
+from decimal import Decimal
+from collections import defaultdict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,8 +36,6 @@ def find_transaction_by_number(root, transaction_number):
     return None
 
 
-
-
 #{"Ac":"8","Nb":"2685","Id":"(null)","Dt":"06/25/2022","Dv":"(null)","Cu":"1","Am":"1000.00","Exb":"0","Exr":"0.00","Exf":"0.00","Pa":"190","Ca":"0","Sca":"0","Br":"0","No":"(null)","Pn":"0","Pc":"(null)","Ma":"0","Ar":"0","Au":"0","Re":"0","Fi":"0","Bu":"0","Sbu":"0","Vo":"(null)","Ba":"(null)","Trt":"0","Mo":"0"}
 def add_transaction(root, transaction_data):
     """Add a new transaction to the XML root element immediately after the last transaction."""
@@ -43,11 +44,9 @@ def add_transaction(root, transaction_data):
         transaction.set(key, value)
 #   ET.dump(transaction)
    
-    # Find the last transaction element
+    # 1. Find the last <Transaction> element (if any)
     last_transaction = None
-    for elem in root.iter():
-        if elem.tag == 'Transaction':
-            last_transaction = elem
+    last_transaction = root.find('.//Transaction[last()]')
 
     if last_transaction is not None:
         # Insert the new transaction right after the last transaction
@@ -71,24 +70,40 @@ def get_parties_json(parties):
     partie_list = [{'id': partie_id, 'name': partie_name} for partie_id, partie_name in parties.items()]
     return json.dumps(partie_list, indent=4)
 
+def get_categories_json(categories, subcategories):
+    """
+    categories   : dict  {cat_id: cat_name}
+    subcategories: dict  {cat_id: [{'id':..., 'name':...}, ...]}
+    """
+    #categorie_list = [{'id': categorie_id, 'name': categorie_name, 'subcategories': [{'id': sc_id, 'name': sc_name} for (c_id, sc_id), sc_name in subcategories.items() if c_id == categorie_id]} for categorie_id, categorie_name in categories.items()]
+    categorie_list = [{'id': cid, 'name': cname, 'subcategories': subcategories.get(cid, [])} for cid, cname in categories.items()]
+    return json.dumps(categorie_list)
+
+def get_payments_json(payments):
+    payment_list = [{'id': payment_id, 'name': payment_info['name'], 'account': payment_info['account']} for payment_id, payment_info in payments.items()]
+    return json.dumps(payment_list, indent=4)
+
 def get_accounts_json(accounts, account_totals):
-    account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})} for account_id, account_info in accounts.items()]
+    #account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})} for account_id, account_info in accounts.items()]
+    account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': {'total_amount': float(round(account_totals[account_id]['total_amount'], 2)), 'total_marked_amount': float(round(account_totals[account_id]['total_marked_amount'], 2))}} for account_id, account_info in accounts.items()]
     return json.dumps(account_list)
 
-def get_account_transactions_json(accounts, transactions, account_totals, account_id):
+def get_account_transactions_json(accounts, transactions, account_totals, payments, account_id):
     account_transactions = [tx for tx in transactions if tx['Account'] == accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['name']]
     account_totals_data = account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})
+    payment_methods = [{'id': payment_id, 'name': payment_info['name']} for payment_id, payment_info in payments.items() if payment_info['account'] == account_id]
 
     result = {
         'account_id': account_id,
         'account_name': accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['name'],
-        'bank_name': accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['bank'],
+        'bank_id': accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['bank'],
         'transactions': account_transactions,
         'currency': account_totals_data['Currency'],
-        'total_amount': round(account_totals_data['total_amount'], 2),
-        'total_marked_amount': round(account_totals_data['total_marked_amount'], 2)
+        'total_amount': float(round(account_totals_data['total_amount'], 2)),
+        'total_marked_amount': float(round(account_totals_data['total_marked_amount'], 2)),
+        'payment_methods': payment_methods
     }
-    return json.dumps(result, indent=4)
+    return json.dumps(result)
 
 def extract_data(root):
     """Extract data from the XML root element."""
@@ -108,7 +123,8 @@ def extract_data(root):
 
     # Extract categories and subcategories
     categories = {}
-    subcategories = {}
+    subcategories_name_map = {}
+    subcategories = defaultdict(list)
     for category in root.findall('Category'):
         category_id = category.get('Nb')
         category_name = category.get('Na')
@@ -118,14 +134,18 @@ def extract_data(root):
         category_id = subcategory.get('Nbc')
         subcategory_id = subcategory.get('Nb')
         subcategory_name = subcategory.get('Na')
-        subcategories[(category_id, subcategory_id)] = subcategory_name
+        subcategories_name_map[(category_id, subcategory_id)] = subcategory_name
+        subcategories[category_id].append({'id': subcategory_id, 'name': subcategory_name})
 
     # Extract payment methods
     payments = {}
+    #payments['0'] = { 'name': 'Unknown', 'account': '0' }
     for payment in root.findall('Payment'):
         payment_number = payment.get('Number')
-        payment_name = payment.get('Name')
-        payments[payment_number] = payment_name
+        payments[payment_number] = {
+            'name': payment.get('Name'),
+            'account': payment.get('Account')
+        }
 
     # Extract banks and map account IDs to bank names
     banks = {}
@@ -154,14 +174,13 @@ def extract_data(root):
     # Initialize counters for each account
     account_totals = {}
     for account_id in accounts:
-        account_totals[account_id] = {'total_amount': 0.0, 'total_marked_amount': 0.0}
+        account_totals[account_id] = {'total_amount': Decimal('0.0'), 'total_marked_amount': Decimal('0.0')}
 
     # Extract transactions
     transactions = []
-
     for transaction in root.findall('Transaction'):
         account_id = transaction.get('Ac')
-        amount = float(transaction.get('Am', '0.00'))
+        amount = Decimal(transaction.get('Am', '0.00'))
         marked = int(transaction.get('Ma', '0'))
 
         # Get account info including bank number
@@ -176,16 +195,16 @@ def extract_data(root):
             'Date': transaction.get('Dt'),
 #            'Value Date': transaction.get('Dv'),
             'Currency': currencies.get(transaction.get('Cu'), 'Unknown'),
-            'Amount': amount,
+            'Amount': float(amount),
 #            'Change between account and transaction': transaction.get('Exb'),
 #            'Exchange Rate': transaction.get('Exr'),
 #            'Exchange Fee': transaction.get('Exf'),
             'Party': parties.get(transaction.get('Pa'), 'Unknown'),
             'Category': categories.get(transaction.get('Ca'), 'Uncategorized'),
-            'Subcategory': subcategories.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized'),
+            'Subcategory': subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized'),
             'Bank Reference': transaction.get('Br'),
             'Note': transaction.get('No'),
-            'Payment Method': payments.get(transaction.get('Pn'), 'Unknown'),
+            'Payment Method': payments.get(transaction.get('Pn'), { 'name': 'Unknown' })['name'],
             'Payment Method Content': transaction.get('Pc'),
             'Marked': marked,
 #            'Archive Number': transaction.get('Ar'),
@@ -207,7 +226,7 @@ def extract_data(root):
             account_totals[account_id]['total_marked_amount'] += amount
         account_totals[account_id]['Currency'] = currencies.get(transaction.get('Cu'), 'Unknown')
 
-    return accounts, parties, transactions, account_totals
+    return accounts, parties, transactions, categories, subcategories, payments, account_totals
 
 def get_stdin_content():
     file_content = b''
@@ -224,6 +243,8 @@ if __name__ == "__main__":
     parser.add_argument('--check-file', action='store_true', help='Check encrypted file')
     parser.add_argument('--list-accounts', action='store_true', help='List Accounts from GSB file')
     parser.add_argument('--list-parties', action='store_true', help='List Parties from GSB file')
+    parser.add_argument('--list-categories', action='store_true', help='List Categories from GSB file')
+    parser.add_argument('--list-payments', action='store_true', help='List Payments from GSB file')
     parser.add_argument('--list-transactions', help='List Transactions from GSB file')
     parser.add_argument('--add-transaction', action='store_true', help='Add a new transaction')
     parser.add_argument('--transaction-data', help='JSON string containing transaction data')
@@ -247,14 +268,15 @@ if __name__ == "__main__":
         else:
             file_content = crypted_file_content
     else:
-        file_content = gsb_decode.read_gsb_file(sys.stdin)
+        #file_content = gsb_decode.read_gsb_file(sys.stdin)
+        file_content = gsb_decode.read_gsb_file(file_path)
 
     root = parse_gsb_content(file_content)
     if root is None:
         logging.error("Failed to parse the GSB file.")
         exit(1)
 
-    accounts, parties, transactions, account_totals = extract_data(root)
+    accounts, parties, transactions, categories, subcategories, payments, account_totals = extract_data(root)
 
     if args.add_transaction:
         if not args.transaction_data:
@@ -294,9 +316,17 @@ if __name__ == "__main__":
         #logging.info("\nParties JSON:")
         print(parties_json)
 
+    if args.list_categories:
+        categories_json = get_categories_json(categories, subcategories)
+        print(categories_json)
+
+    if args.list_payments:
+        payments_json = get_payments_json(payments)
+        print(payments_json)
+
     if args.list_transactions:
         # Get transactions for a specific account in JSON format
         account_id = args.list_transactions  # Example account ID
-        account_transactions_json = get_account_transactions_json(accounts, transactions, account_totals, account_id)
+        account_transactions_json = get_account_transactions_json(accounts, transactions, account_totals, payments, account_id)
         #logging.info("\nAccount Transactions JSON:")
         print(account_transactions_json)
