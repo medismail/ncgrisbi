@@ -71,11 +71,11 @@
             <td>
               <input
                 v-model="transaction.Party"
-                list="Partes"
+                :list="'Partes-'+index"
                 :disabled="!transaction.isEditing"
                 @input="() => onPartyChange(transaction)"
               >
-              <datalist id="Partes">
+              <datalist :id="'Partes-'+index">
                 <option
                   v-for="party in parties"
                   :key="party.id"
@@ -88,10 +88,10 @@
             <td>
               <input
                 v-model="transaction.Category"
-                list="categories"
+                :list="'Categories-'+index"
                 :disabled="!transaction.isEditing"
                 @input="transaction.Subcategory=''"
-              ><datalist id="categories">
+              ><datalist :id="'Categories-'+index">
                 <option
                   v-for="c in categories"
                   :key="c.id"
@@ -100,10 +100,10 @@
               </datalist> (<input
                 v-model="transaction.Subcategory"
                 type="text"
-                :list="'subcategories-'+index"
+                :list="'Subcategories-'+index"
                 :disabled="!transaction.isEditing"
               >)
-              <datalist :id="'subcategories-'+index">
+              <datalist :id="'Subcategories-'+index">
                 <option
                   v-for="s in subCategories(transaction)"
                   :key="s.id"
@@ -114,10 +114,10 @@
             <td>
               <input
                 v-model="transaction['Payment Method']"
-                list="Payment_methods"
+                :list="'Payment_methods-'+index"
                 :disabled="!transaction.isEditing"
               >
-              <datalist id="Payment_methods">
+              <datalist :id="'Payment_methods-'+index">
                 <option
                   v-for=" payment_method in transactions.payment_methods"
                   :key="payment_method.id"
