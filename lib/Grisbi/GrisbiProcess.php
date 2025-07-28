@@ -234,6 +234,18 @@ class GrisbiProcess
     }
 
     /**
+     * Retrieves a list of categories from the specified GSB file.
+     *
+     * @param string $filePath The path to the GSB file.
+     * @return string The list of categories as returned by the Grisbi script.
+     * @throws \RuntimeException If the script execution fails.
+     */
+    public function getCategories(string $filePath): string
+    {
+        return $this->run(['--list-categories', '--pass-word', $this->password, '-'], $filePath);
+    }
+
+    /**
      * Retrieves a list of transactions from the specified GSB file.
      *
      * @param string $filePath The path to the GSB file.

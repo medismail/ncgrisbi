@@ -24,6 +24,9 @@
         </li>
       </ul>
       <h3>Transactions:</h3>
+      <button @click="addNewTransaction">
+        Add Transaction
+      </button>
       <table class="transaction-table">
         <thead>
           <tr>
@@ -61,6 +64,7 @@
               <input
                 v-model="transaction.Amount"
                 type="number"
+                class="input-amount"
                 :disabled="!transaction.isEditing"
               >
             </td>
@@ -69,6 +73,7 @@
                 v-model="transaction.Party"
                 list="Partes"
                 :disabled="!transaction.isEditing"
+                @input="() => onPartyChange(transaction)"
               >
               <datalist id="Partes">
                 <option
@@ -83,13 +88,28 @@
             <td>
               <input
                 v-model="transaction.Category"
-                type="text"
+                list="categories"
                 :disabled="!transaction.isEditing"
-              > (<input
+                @input="transaction.Subcategory=''"
+              ><datalist id="categories">
+                <option
+                  v-for="c in categories"
+                  :key="c.id"
+                  :value="c.name"
+                />
+              </datalist> (<input
                 v-model="transaction.Subcategory"
                 type="text"
+                :list="'subcategories-'+index"
                 :disabled="!transaction.isEditing"
               >)
+              <datalist :id="'subcategories-'+index">
+                <option
+                  v-for="s in subCategories(transaction)"
+                  :key="s.id"
+                  :value="s.name"
+                />
+              </datalist>
             </td>
             <td>
               <input
@@ -155,9 +175,6 @@
           </tr>
         </tbody>
       </table>
-      <button @click="addNewTransaction">
-        Add Transaction
-      </button>
     </template>
   </NcAppContent>
 </template>
@@ -176,6 +193,7 @@ const loading = ref(true)
 const selectedAccountId = ref(route.params.id)
 const languageCode = ref('en')
 const parties = ref([])
+const categories = ref([])
 
 // Fetch transactions from API
 const fetchTransactions = async () => {
@@ -227,8 +245,29 @@ const fetchParties = async () => {
   }
 };
 
+// Fetch categories from API
+const fetchCategories = async () => {
+  const data = { filePath: store.state.filePath, filePassword: store.state.filePassword };
+  const jsonData = JSON.stringify(data);
+  const requestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: jsonData,
+  };
+  try {
+    const response = await fetch('/apps/ncgrisbi/api/categories', requestOptions);
+    const data = await response.json();
+    categories.value = data;
+  } catch (error) {
+    console.error('Failed to fetch categories:', error);
+  }
+};
+
 // Call fetchTransactions function when component is mounted
 onMounted(fetchParties);
+onMounted(fetchCategories);
 onMounted(fetchTransactions)
 
 // Watch for changes to route.params.id and refetch transactions if it changes
@@ -262,10 +301,18 @@ const saveTransaction = async (transaction) => {
   }
 };
 
+const formatDate = () => {
+  const current = new Date()
+  const month = (current.getMonth() + 1).toString().padStart(2, '0')
+  const day = current.getDate().toString().padStart(2, '0')
+  const year = current.getFullYear()
+  return `${month}/${day}/${year}`;
+}
+
 const addNewTransaction = () => {
   const newTransaction = {
-    'Transaction Number': transactions.value.transactions.length + 1, // Simple increment for now
-    Date: '',
+    'Transaction Number': transactions.value.next_id,
+    Date: formatDate(),
     Amount: 0,
     Party: '',
     Category: '',
@@ -278,6 +325,28 @@ const addNewTransaction = () => {
     isEditing: true // New transactions are in edit mode by default
   }
   transactions.value.transactions.push(newTransaction)
+}
+
+// Update Amount Category ans SubCategory on Party changes
+function onPartyChange(t) {
+  const party = parties.value.find(p => p.name === t.Party)
+  if (party) {
+    if (t.Amount == 0) { 
+      t.Amount = party.last_amount
+    }
+    if (t.Category == '') {
+      t.Category = party.last_category
+    }
+    if (t.Subcategory == '') {
+      t.Subcategory = party.last_subcategory
+    }
+  }
+}
+
+// reactive list of sub-categories
+function subCategories(t) {
+  const cat = categories.value.find(c => c.name === t.Category)
+  return cat ? cat.subcategories : []
 }
 </script>
 
@@ -305,6 +374,10 @@ const addNewTransaction = () => {
 .bright-row input{
  color: #ffffff;
  border-color: #bbbbbb;
+}
+
+.input-amount input{
+ text-align: right;
 }
 
 .checkbox-wrapper-13 input[type=checkbox] {

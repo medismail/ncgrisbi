@@ -13,6 +13,7 @@ return [
         ['name' => 'api#get_transactions', 'url' => '/api/account/{accountId}', 'verb' => 'POST'],
         ['name' => 'api#save_transaction', 'url' => '/api/savetransaction', 'verb' => 'POST'],
         ['name' => 'api#get_parties', 'url' => '/api/parties', 'verb' => 'POST'],
+        ['name' => 'api#get_categories', 'url' => '/api/categories', 'verb' => 'POST'],
         ['name' => 'api#check_encrypted', 'url' => '/api/checkencrypted', 'verb' => 'GET'],
     ]
 ];

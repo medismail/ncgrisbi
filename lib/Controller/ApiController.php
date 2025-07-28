@@ -51,6 +51,26 @@ class ApiController extends Controller {
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
+    public function getCategories(string $filePath, string $filePassword): JSONResponse {
+        if (Helper::pythonInstalled()) {
+            $rootFolder = \OC::$server->getRootFolder();
+            $storageHandle = new StorageHandle($rootFolder);
+            $contents = $storageHandle->readFile($this->userId, $filePath);
+            $process = new GrisbiProcess();
+            $process->setPassword($filePassword);
+            $categories = json_decode($process->getCategories($contents), true);
+            return new JSONResponse($categories);
+        }
+        return new JSONResponse([]); // Return an empty array if Python is not installed
+    }
+
+    /**
+     * @param string $filePath
+     * @param string $filePassword
+     *
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function getAccounts(string $filePath, string $filePassword): JSONResponse {
         if (Helper::pythonInstalled()) {
             /*$retval = null;

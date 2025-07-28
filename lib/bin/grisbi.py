@@ -67,7 +67,7 @@ def write_gsb_content(root):
     return f.getvalue().decode('utf-8')
 
 def get_parties_json(parties):
-    partie_list = [{'id': partie_id, 'name': partie_name} for partie_id, partie_name in parties.items()]
+    partie_list = [{'id': partie_id, 'name': partie_info['name'], 'last_amount': partie_info['last_amount'], 'last_category': partie_info['last_category'], 'last_subcategory': partie_info['last_subcategory']} for partie_id, partie_info in parties.items()]
     return json.dumps(partie_list, indent=4)
 
 def get_categories_json(categories, subcategories):
@@ -88,7 +88,7 @@ def get_accounts_json(accounts, account_totals):
     account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': {'total_amount': float(round(account_totals[account_id]['total_amount'], 2)), 'total_marked_amount': float(round(account_totals[account_id]['total_marked_amount'], 2))}} for account_id, account_info in accounts.items()]
     return json.dumps(account_list)
 
-def get_account_transactions_json(accounts, transactions, account_totals, payments, account_id):
+def get_account_transactions_json(accounts, transactions, account_totals, payments, account_id, next_id):
     account_transactions = [tx for tx in transactions if tx['Account'] == accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['name']]
     account_totals_data = account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})
     payment_methods = [{'id': payment_id, 'name': payment_info['name']} for payment_id, payment_info in payments.items() if payment_info['account'] == account_id]
@@ -101,7 +101,8 @@ def get_account_transactions_json(accounts, transactions, account_totals, paymen
         'currency': account_totals_data['Currency'],
         'total_amount': float(round(account_totals_data['total_amount'], 2)),
         'total_marked_amount': float(round(account_totals_data['total_marked_amount'], 2)),
-        'payment_methods': payment_methods
+        'payment_methods': payment_methods,
+        'next_id': int(next_id)+1
     }
     return json.dumps(result)
 
@@ -119,7 +120,7 @@ def extract_data(root):
     for party in root.findall('Party'):
         party_id = party.get('Nb')
         party_name = party.get('Na')
-        parties[party_id] = party_name
+        parties[party_id] = { 'name': party_name, 'last_amount': 0, 'last_category': '', 'last_subcategory': '' }
 
     # Extract categories and subcategories
     categories = {}
@@ -177,11 +178,21 @@ def extract_data(root):
         account_totals[account_id] = {'total_amount': Decimal('0.0'), 'total_marked_amount': Decimal('0.0')}
 
     # Extract transactions
+    next_id = 0
     transactions = []
     for transaction in root.findall('Transaction'):
         account_id = transaction.get('Ac')
         amount = Decimal(transaction.get('Am', '0.00'))
         marked = int(transaction.get('Ma', '0'))
+        next_id = transaction.get('Nb')
+        party_id = transaction.get('Pa')
+        category = categories.get(transaction.get('Ca'), 'Uncategorized')
+        subcategory = subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized')
+        #if party_id and party_id in parties:
+        if int(party_id):
+            parties[party_id]['last_amount'] = float(amount)
+            parties[party_id]['last_category'] = category
+            parties[party_id]['last_subcategory'] = subcategory
 
         # Get account info including bank number
         account_info = accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})
@@ -190,7 +201,7 @@ def extract_data(root):
         transaction_data = {
             'Account': account_info['name'],
 #            'Bank': banks.get(account_info['bank'], 'Unknown'),
-            'Transaction Number': transaction.get('Nb'),
+            'Transaction Number': next_id,
 #            'Transaction ID': transaction.get('Id'),
             'Date': transaction.get('Dt'),
 #            'Value Date': transaction.get('Dv'),
@@ -199,9 +210,9 @@ def extract_data(root):
 #            'Change between account and transaction': transaction.get('Exb'),
 #            'Exchange Rate': transaction.get('Exr'),
 #            'Exchange Fee': transaction.get('Exf'),
-            'Party': parties.get(transaction.get('Pa'), 'Unknown'),
-            'Category': categories.get(transaction.get('Ca'), 'Uncategorized'),
-            'Subcategory': subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized'),
+            'Party': parties.get(party_id, { 'name': 'Unknown' })['name'],
+            'Category': category,
+            'Subcategory': subcategory,
             'Bank Reference': transaction.get('Br'),
             'Note': transaction.get('No'),
             'Payment Method': payments.get(transaction.get('Pn'), { 'name': 'Unknown' })['name'],
@@ -226,7 +237,7 @@ def extract_data(root):
             account_totals[account_id]['total_marked_amount'] += amount
         account_totals[account_id]['Currency'] = currencies.get(transaction.get('Cu'), 'Unknown')
 
-    return accounts, parties, transactions, categories, subcategories, payments, account_totals
+    return accounts, parties, transactions, categories, subcategories, payments, account_totals, next_id
 
 def get_stdin_content():
     file_content = b''
@@ -276,7 +287,7 @@ if __name__ == "__main__":
         logging.error("Failed to parse the GSB file.")
         exit(1)
 
-    accounts, parties, transactions, categories, subcategories, payments, account_totals = extract_data(root)
+    accounts, parties, transactions, categories, subcategories, payments, account_totals, next_id = extract_data(root)
 
     if args.add_transaction:
         if not args.transaction_data:
@@ -327,6 +338,6 @@ if __name__ == "__main__":
     if args.list_transactions:
         # Get transactions for a specific account in JSON format
         account_id = args.list_transactions  # Example account ID
-        account_transactions_json = get_account_transactions_json(accounts, transactions, account_totals, payments, account_id)
+        account_transactions_json = get_account_transactions_json(accounts, transactions, account_totals, payments, account_id, next_id)
         #logging.info("\nAccount Transactions JSON:")
         print(account_transactions_json)
