@@ -27,173 +27,165 @@
       <button @click="addNewTransaction">
         Add Transaction
       </button>
-      <table class="transaction-table">
-        <thead>
-          <tr>
-            <th class="transaction-number">
-              #
-            </th>
-            <th>Date</th>
-            <th>Amount</th>
-            <th>Party</th>
-            <th>Category (Subcategory)</th>
-            <th>Payment Method</th>
-            <th>Note</th>
-            <th>Marked</th>
-            <th>Bank Reference</th>
-            <th>Split Transaction</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(transaction, index) in transactions.transactions.slice().reverse()"
-            :key="index"
-            class="checkbox-wrapper-13"
-            :class="{ 'even-row': index % 2 === 0, 'odd-row': index % 2!== 0, 'bright-row': !transaction.isEditing }"
+      <!-- scroll container -->
+      <div class="grid-scroll">
+        <div class="transaction-wrapper">
+          <div class="grid-row header">
+            <span class="col-n">#</span>
+            <span class="col-date">Date</span>
+            <span class="col-amount">Amount</span>
+            <span class="col-party">Party</span>
+            <span class="col-cat">Category (SubCategory)</span>
+            <span class="col-pm">Payment Method</span>
+            <span class="col-note">Note</span>
+            <span class="col-mark">Marked</span>
+            <span class="col-bref">Bank Ref.</span>
+            <span class="col-split">Split</span>
+            <span class="col-actions">Actions</span>
+          </div>
+          <DynamicScroller
+            class="scroller"
+            :items="reversedTransactions"
+            :min-item-size="48"
+            key-field="Transaction Number"
           >
-            <td><strong>{{ transaction['Transaction Number'] }}</strong></td>
-            <td>
-              <input
-                v-model="transaction.Date"
-                type="text"
-                :disabled="!transaction.isEditing"
+            <template #default="{ item: t, index, active }">
+              <DynamicScrollerItem
+                tag="div"
+                class="grid-row body checkbox-wrapper-13"
+                :class="{ 'bright-row': !t.isEditing }"
+                :item="t"
+                :active="active"
+                :data-index="index"
               >
-            </td>
-            <td>
-              <input
-                v-model="transaction.Amount"
-                type="number"
-                class="input-amount"
-                :disabled="!transaction.isEditing"
-              >
-            </td>
-            <td>
-              <input
-                v-model="transaction.Party"
-                :list="'Partes-'+index"
-                :disabled="!transaction.isEditing"
-                @input="() => onPartyChange(transaction)"
-              >
-              <datalist :id="'Partes-'+index">
-                <option
-                  v-for="party in parties"
-                  :key="party.id"
-                  :value="party.name"
-                >
-                  {{ party.name }}
-                </option>
-              </datalist>
-            </td>
-            <td>
-              <input
-                v-model="transaction.Category"
-                :list="'Categories-'+index"
-                :disabled="!transaction.isEditing"
-                @input="transaction.Subcategory=''"
-              ><datalist :id="'Categories-'+index">
-                <option
-                  v-for="c in categories"
-                  :key="c.id"
-                  :value="c.name"
-                />
-              </datalist> (<input
-                v-model="transaction.Subcategory"
-                type="text"
-                :list="'Subcategories-'+index"
-                :disabled="!transaction.isEditing"
-              >)
-              <datalist :id="'Subcategories-'+index">
-                <option
-                  v-for="s in subCategories(transaction)"
-                  :key="s.id"
-                  :value="s.name"
-                />
-              </datalist>
-            </td>
-            <td>
-              <input
-                v-model="transaction['Payment Method']"
-                :list="'Payment_methods-'+index"
-                :disabled="!transaction.isEditing"
-              >
-              <datalist :id="'Payment_methods-'+index">
-                <option
-                  v-for=" payment_method in transactions.payment_methods"
-                  :key="payment_method.id"
-                  :value="payment_method.name"
-                >
-                  {{ payment_method.name }}
-                </option>
-              </datalist>
-            </td>
-            <td>
-              <input
-                v-model="transaction.Note"
-                type="text"
-                :disabled="!transaction.isEditing"
-              >
-            </td>
-            <td>
-              <input
-                type="checkbox"
-                :checked="transaction.Marked === 1"
-                :disabled="!transaction.isEditing"
-                @change="transaction.Marked = $event.target.checked ? 1 : 0"
-              >
-            </td>
-            <td>
-              <input
-                type="text"
-                :value="transaction['Bank Reference']"
-                :disabled="!transaction.isEditing"
-                @input="event => transaction['Bank Reference'] = event.target.value"
-              >
-            </td>
-
-            <td>
-              <input
-                v-model="transaction['Split Transaction']"
-                type="checkbox"
-                :disabled="!transaction.isEditing"
-              >
-            </td>
-            <td>
-              <button
-                v-if="!transaction.isEditing"
-                @click="transaction.isEditing = true"
-              >
-                Edit
-              </button>
-              <button
-                v-else
-                @click="saveTransaction(transaction)"
-              >
-                Save
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                <span class="col-n">{{ t['Transaction Number'] }}</span>
+                <span class="col-date"><input
+                  v-model="t.Date"
+                  :disabled="!t.isEditing"
+                ></span>
+                <span class="col-amount"><input
+                  v-model="t.Amount"
+                  type="number"
+                  :disabled="!t.isEditing"
+                ></span>
+                <span class="col-party"><input
+                                          v-model="t.Party"
+                                          :list="'P-'+index"
+                                          :disabled="!t.isEditing"
+                                          @input="() => onPartyChange(t)"
+                                        >
+                  <datalist :id="'P-'+index">
+                    <option
+                      v-for="party in parties"
+                      :key="party.id"
+                      :value="party.name"
+                    > {{ party.name }}
+                    </option>
+                  </datalist>
+                </span>
+                <span class="col-cat">
+                  <input
+                    v-model="t.Category"
+                    :list="'C-'+index"
+                    :disabled="!t.isEditing"
+                    @input="t.Subcategory=''"
+                  >
+                  <datalist :id="'C-'+index">
+                    <option
+                      v-for="c in categories"
+                      :key="c.id"
+                      :value="c.name"
+                    > {{ c.name }}
+                    </option>
+                  </datalist>
+                  (<input
+                    v-model="t.Subcategory"
+                    :list="'S-'+index"
+                    :disabled="!t.isEditing"
+                  >)
+                  <datalist :id="'S-'+index">
+                    <option
+                      v-for="s in subCategories(t)"
+                      :key="s.id"
+                      :value="s.name"
+                    > {{ s.name }}
+                    </option>
+                  </datalist>
+                </span>
+                <span class="col-pm"><input
+                                       v-model="t['Payment Method']"
+                                       :list="'PM-'+index"
+                                       :disabled="!t.isEditing"
+                                     >
+                  <datalist :id="'PM-'+index">
+                    <option
+                      v-for=" payment_method in transactions.payment_methods"
+                      :key="payment_method.id"
+                      :value="payment_method.name"
+                    > {{ payment_method.name }}
+                    </option>
+                  </datalist>
+                </span>
+                <span class="col-note"><input
+                  v-model="t.Note"
+                  :disabled="!t.isEditing"
+                ></span>
+                <span class="col-mark"><input
+                  type="checkbox"
+                  :checked="t.Marked===1"
+                  :disabled="!t.isEditing"
+                  @change="t.Marked = $event.target.checked ? 1 : 0"
+                ></span>
+                <span class="col-bref"><input
+                  v-model="t['Bank Reference']"
+                  :disabled="!t.isEditing"
+                ></span>
+                <span class="col-split"><input
+                  v-model="t['Split Transaction']"
+                  :disabled="!t.isEditing"
+                ></span>
+                <span class="col-actions">
+                  <button
+                    v-if="!t.isEditing"
+                    @click="t.isEditing=true"
+                  >Edit</button>
+                  <button
+                    v-else
+                    @click="saveTransaction(t)"
+                  >Save</button>
+                </span>
+              </DynamicScrollerItem>
+            </template>
+          </DynamicScroller>
+        </div>
+      </div>
     </template>
   </NcAppContent>
 </template>
 
 <script setup>
 import { NcAppContent, NcLoadingIcon } from '@nextcloud/vue'
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { formatCurrency } from '@/utils/format'
 import { useStore } from 'vuex'
 import { useRoute } from 'vue-router'
 import { getLanguage } from '@nextcloud/l10n'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 const store = useStore()
 const route = useRoute()
 const transactions = ref({})
+const reversedTransactions = computed(() => transactions.value.transactions.slice().reverse())
 const loading = ref(true)
 const selectedAccountId = ref(route.params.id)
 const languageCode = ref('en')
 const parties = ref([])
 const categories = ref([])
+const categoryMap = computed(() => {
+  const map = new Map()
+  categories.value.forEach(c => map.set(c.name, c.subcategories || []))
+  return map
+})
 
 // Fetch transactions from API
 const fetchTransactions = async () => {
@@ -324,6 +316,7 @@ const addNewTransaction = () => {
     'Split Transaction': false,
     isEditing: true // New transactions are in edit mode by default
   }
+  transactions.value.next_id = transactions.value.next_id + 1
   transactions.value.transactions.push(newTransaction)
 }
 
@@ -344,31 +337,65 @@ function onPartyChange(t) {
 }
 
 // reactive list of sub-categories
-function subCategories(t) {
-  const cat = categories.value.find(c => c.name === t.Category)
-  return cat ? cat.subcategories : []
+function subCategories(transaction) {
+  return categoryMap.value.get(transaction.Category) || []
 }
 </script>
 
 <style scoped>
-.transaction-table {
-  border-collapse: collapse;
+/* container for both header + body */
+.transaction-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.grid-scroll {
   width: 100%;
+  overflow-x: auto;   /* horizontal scroll when needed */
 }
 
-.transaction-table th,.transaction-table td {
-  border: 1px solid #ccc;
-  padding: 10px;
-  text-align: left;
+/* shared grid definition */
+.grid-row {
+  display: grid;
+  grid-template-columns:
+    60px               /* #        */
+    120px              /* Date     */
+    110px              /* Amount   */
+    180px              /* Party    */
+    340px              /* Category */
+    150px              /* Pay-Meth */
+    180px              /* Note     */
+    60px               /* Marked   */
+    140px              /* Bank Ref */
+    140px              /* Split    */
+    100px;             /* Actions  */
+  align-items: center;
+  gap: 4px;
 }
 
-.transaction-number {
-  max-width: 90px;
-  white-space: normal;
+/* header cosmetics */
+.header {
+  font-weight: bold;
+  background: var(--color-background-dark);
+  border-bottom: 1px solid var(--color-border);
+  padding: 6px 4px;
 }
 
-.transaction-table tr td:nth-child(3) {
- text-align: right;
+/* body cosmetics */
+.body:nth-child(even) { background: var(--color-background-darker); }
+.body > span { padding: 4px; }
+
+/* keep category + subcategory on one line inside the same cell */
+.col-cat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* scroller height */
+.scroller {
+  height: 400px;   /* or flex: 1 */
+  width: 172%;
 }
 
 .bright-row input{
@@ -376,8 +403,29 @@ function subCategories(t) {
  border-color: #bbbbbb;
 }
 
-.input-amount input{
+.col-amount input{
  text-align: right;
+ width: 100px;
+}
+
+.col-party input{
+ width: 170px;
+}
+
+.col-cat input{
+ width: 150px;
+}
+
+.col-date input{
+ width: 110px;
+}
+
+.col-pm input{
+ width: 140px;
+}
+
+.col-note input{
+ width: 170px;
 }
 
 .checkbox-wrapper-13 input[type=checkbox] {
