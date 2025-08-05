@@ -141,7 +141,7 @@ def read_gsb_file(file_path):
         return decrypt_v2(password, file_content)
 
 def write_gsb_file(file_path, file_content):
-    with open(file_path, 'wb') as f:
+    with open(file_path, 'w') as f:
         f.write(file_content)
 
 ##def main():

@@ -128,6 +128,7 @@
                 </span>
                 <span class="col-note"><input
                   v-model="t.Note"
+                  :value="convertNullStringToEmpty(t.Note)"
                   :disabled="!t.isEditing"
                 ></span>
                 <span class="col-mark"><input
@@ -269,10 +270,39 @@ watch(() => route.params.id, (newId) => {
 })
 
 const saveTransaction = async (transaction) => {
+  var formatedTransaction = transaction
+  formatedTransaction['Ac'] = selectedAccountId.value
+  formatedTransaction['Nb'] = transaction['Transaction Number']
+  formatedTransaction['Id'] = "(null)"
+  formatedTransaction['Dt'] = transaction['Date']
+  formatedTransaction['Dv'] = "(null)"
+  formatedTransaction['Cu'] = "1" //getTransactionElementId(currencies, transaction['Currency'])
+  formatedTransaction['Am'] = transaction['Amount']
+  formatedTransaction['Exb'] = "0"
+  formatedTransaction['Exr'] = "0.00"
+  formatedTransaction['Exf'] = "0.00"
+  formatedTransaction['Pa'] = getTransactionElementId(parties, transaction['Party'])
+  formatedTransaction['Ca'] = getTransactionElementId(categories, transaction['Category'])
+  formatedTransaction['Sca'] = getTransactionElementId(categoryMap.value.get(transaction['Category']), transaction['Subcategory'])
+  formatedTransaction['Br'] = transaction['Bank Reference']
+  formatedTransaction['No'] = transaction['Note']
+  formatedTransaction['Pn'] = getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method'])
+  formatedTransaction['Pc'] = "(null)"
+  formatedTransaction['Ma'] = transaction['Marked']
+  formatedTransaction['Ar'] = "0"
+  formatedTransaction['Au'] = "0"
+  formatedTransaction['Re'] = "0"
+  formatedTransaction['Fi'] = "0"
+  formatedTransaction['Bu'] = "0"
+  formatedTransaction['Sbu'] = "0"
+  formatedTransaction['Vo'] = "(null)"
+  formatedTransaction['Ba'] = "(null)"
+  formatedTransaction['Trt'] = transaction['Split Transaction']
+  formatedTransaction['Mo'] = "0"
   const data = {
     filePath: store.state.filePath,
     filePassword: store.state.filePassword,
-    transactionDataJson: JSON.stringify(transaction), // Send the transaction object as a JSON string
+    transactionDataJson: JSON.stringify(formatedTransaction), // Send the transaction object as a JSON string
   };
 
   const requestOptions = {
@@ -301,19 +331,24 @@ const formatDate = () => {
   return `${month}/${day}/${year}`;
 }
 
+function convertNullStringToEmpty(str) {
+    return str === "(null)" ? "" : str;
+}
+
 const addNewTransaction = () => {
   const newTransaction = {
     'Transaction Number': transactions.value.next_id,
     Date: formatDate(),
     Amount: 0,
+    Currency: 'EUR',
     Party: '',
     Category: '',
     Subcategory: '',
     'Payment Method': '',
     Note: '',
-    Marked: false,
-    'Bank Reference': null,
-    'Split Transaction': false,
+    Marked: 0,
+    'Bank Reference': 0,
+    'Split Transaction': 0,
     isEditing: true // New transactions are in edit mode by default
   }
   transactions.value.next_id = transactions.value.next_id + 1
@@ -339,6 +374,11 @@ function onPartyChange(t) {
 // reactive list of sub-categories
 function subCategories(transaction) {
   return categoryMap.value.get(transaction.Category) || []
+}
+
+function getTransactionElementId(g, n) {
+  const r = g.value.find(e => e.name === n)
+  return r.id
 }
 </script>
 

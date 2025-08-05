@@ -6,6 +6,8 @@ return [
         // Vue app page
         ['name' => 'page#index', 'url' => '/', 'verb' => 'GET'],
         ['name' => 'page#accounts', 'url' => '/accounts', 'verb' => 'GET'],
+        ['name' => 'page#account', 'url' => '/account/{id}', 'verb' => 'GET'],
+        ['name' => 'page#typepass', 'url' => '/typepass', 'verb' => 'GET'],
         ['name' => 'page#file', 'url' => '/file', 'verb' => 'GET'],
 
         // API endpoints

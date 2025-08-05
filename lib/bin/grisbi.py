@@ -80,8 +80,8 @@ def get_categories_json(categories, subcategories):
     return json.dumps(categorie_list)
 
 def get_payments_json(payments):
-    payment_list = [{'id': payment_id, 'name': payment_info['name'], 'account': payment_info['account']} for payment_id, payment_info in payments.items()]
-    return json.dumps(payment_list, indent=4)
+    payment_list = [{'id': payment_id, 'name': payment_info['name'], 'account': payment_info['account'], 'sign': payment_info['sign']} for payment_id, payment_info in payments.items()]
+    return json.dumps(payment_list)
 
 def get_accounts_json(accounts, account_totals):
     #account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})} for account_id, account_info in accounts.items()]
@@ -145,7 +145,8 @@ def extract_data(root):
         payment_number = payment.get('Number')
         payments[payment_number] = {
             'name': payment.get('Name'),
-            'account': payment.get('Account')
+            'account': payment.get('Account'),
+            'sign': payment.get('Sign')
         }
 
     # Extract banks and map account IDs to bank names

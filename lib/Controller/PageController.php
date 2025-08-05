@@ -45,6 +45,32 @@ class PageController extends Controller {
 
     #[NoAdminRequired]
     #[NoCSRFRequired]
+    public function account($id, $file): TemplateResponse | RedirectResponse {
+        $response = null;
+        if (isset($file)) {
+            $response = new TemplateResponse('ncgrisbi', 'main');
+        } else {
+            $response = new RedirectResponse($this->urlGenerator->linkToRoute('ncgrisbi.page.index'));
+        }
+        return $response;
+
+    }
+
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    public function typepass($file): TemplateResponse | RedirectResponse {
+        $response = null;
+        if (isset($file)) {
+            $response = new TemplateResponse('ncgrisbi', 'main');
+        } else {
+            $response = new RedirectResponse($this->urlGenerator->linkToRoute('ncgrisbi.page.index'));
+        }
+        return $response;
+
+    }
+
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function file($open): RedirectResponse {
         $response = null;
         if (isset($open)) {
