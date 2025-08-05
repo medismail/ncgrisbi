@@ -281,9 +281,13 @@ const saveTransaction = async (transaction) => {
   formatedTransaction['Exb'] = "0"
   formatedTransaction['Exr'] = "0.00"
   formatedTransaction['Exf'] = "0.00"
+  // Get IDs from names using helper function and data lists
   formatedTransaction['Pa'] = getTransactionElementId(parties, transaction['Party'])
   formatedTransaction['Ca'] = getTransactionElementId(categories, transaction['Category'])
-  formatedTransaction['Sca'] = getTransactionElementId(categoryMap.value.get(transaction['Category']), transaction['Subcategory'])
+  // For subcategories, find the subcategory in the list for the selected category
+  const subcategoryList = categoryMap.value.get(transaction['Category']);
+  const selectedSubcategory = subcategoryList ? subcategoryList.find(s => s.name === transaction['Subcategory']) : null;
+  formatedTransaction['Sca'] = selectedSubcategory ? selectedSubcategory.id : '0'; // Set to ID or default '0' if not found
   formatedTransaction['Br'] = transaction['Bank Reference']
   formatedTransaction['No'] = transaction['Note']
   formatedTransaction['Pn'] = getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method'])
@@ -393,9 +397,7 @@ function getTransactionElementId(g, n) {
   width: 100%;
   overflow-x: auto;   /* horizontal scroll when needed */
 }
-
-/* shared grid definition */
-.grid-row {
+/* shared grid definition */ .grid-row {
   display: grid;
   grid-template-columns:
     60px               /* #        */
@@ -412,12 +414,10 @@ function getTransactionElementId(g, n) {
   align-items: center;
   gap: 4px;
 }
-
 /* header cosmetics */
 .header {
   font-weight: bold;
-  background: var(--color-background-dark);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background-dark); border-bottom: 1px solid var(--color-border);
   padding: 6px 4px;
 }
 
