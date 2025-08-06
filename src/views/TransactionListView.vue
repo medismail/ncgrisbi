@@ -17,10 +17,10 @@
       <h3>Totals:</h3>
       <ul>
         <li>
-          <strong>Total Amount:</strong> {{ formatCurrency(transactions.total_amount, transactions.currency, languageCode).formatted }}
+          <strong>Total Amount:</strong> {{ formatCurrency(transactions.total_amount, transactions.currency.name, languageCode).formatted }}
         </li>
         <li>
-          <strong>Total Marked Amount:</strong> {{ formatCurrency(transactions.total_marked_amount, transactions.currency, languageCode).formatted }}
+          <strong>Total Marked Amount:</strong> {{ formatCurrency(transactions.total_marked_amount, transactions.currency.name, languageCode).formatted }}
         </li>
       </ul>
       <h3>Transactions:</h3>
@@ -270,39 +270,37 @@ watch(() => route.params.id, (newId) => {
 })
 
 const saveTransaction = async (transaction) => {
-  var formatedTransaction = transaction
-  formatedTransaction['Ac'] = selectedAccountId.value
-  formatedTransaction['Nb'] = transaction['Transaction Number']
-  formatedTransaction['Id'] = "(null)"
-  formatedTransaction['Dt'] = transaction['Date']
-  formatedTransaction['Dv'] = "(null)"
-  formatedTransaction['Cu'] = "1" //getTransactionElementId(currencies, transaction['Currency'])
-  formatedTransaction['Am'] = transaction['Amount']
-  formatedTransaction['Exb'] = "0"
-  formatedTransaction['Exr'] = "0.00"
-  formatedTransaction['Exf'] = "0.00"
-  // Get IDs from names using helper function and data lists
-  formatedTransaction['Pa'] = getTransactionElementId(parties, transaction['Party'])
-  formatedTransaction['Ca'] = getTransactionElementId(categories, transaction['Category'])
-  // For subcategories, find the subcategory in the list for the selected category
-  const subcategoryList = categoryMap.value.get(transaction['Category']);
-  const selectedSubcategory = subcategoryList ? subcategoryList.find(s => s.name === transaction['Subcategory']) : null;
-  formatedTransaction['Sca'] = selectedSubcategory ? selectedSubcategory.id : '0'; // Set to ID or default '0' if not found
-  formatedTransaction['Br'] = transaction['Bank Reference']
-  formatedTransaction['No'] = transaction['Note']
-  formatedTransaction['Pn'] = getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method'])
-  formatedTransaction['Pc'] = "(null)"
-  formatedTransaction['Ma'] = transaction['Marked']
-  formatedTransaction['Ar'] = "0"
-  formatedTransaction['Au'] = "0"
-  formatedTransaction['Re'] = "0"
-  formatedTransaction['Fi'] = "0"
-  formatedTransaction['Bu'] = "0"
-  formatedTransaction['Sbu'] = "0"
-  formatedTransaction['Vo'] = "(null)"
-  formatedTransaction['Ba'] = "(null)"
-  formatedTransaction['Trt'] = transaction['Split Transaction']
-  formatedTransaction['Mo'] = "0"
+  const subcategoryList = subCategories(transaction)
+  const formatedTransaction = {
+    'Ac': selectedAccountId.value,
+    'Nb': transaction['Transaction Number'],
+    'Id': "(null)",
+    'Dt': transaction['Date'],
+    'Dv': "(null)",
+    'Cu': transactions.value.currency.id,
+    'Am': transaction['Amount'].toString(),
+    'Exb': "0",
+    'Exr': "0.00",
+    'Exf': "0.00",
+    'Pa': getTransactionElementId(parties.value, transaction['Party']),
+    'Ca': getTransactionElementId(categories.value, transaction['Category']),
+    'Sca': getTransactionElementId(subcategoryList, transaction['Subcategory']),
+    'Br': transaction['Bank Reference'],
+    'No': convertEmptyStringToNull(transaction['Note']),
+    'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method']),
+    'Pc': "(null)",
+    'Ma': transaction['Marked'].toString(),
+    'Ar': "0",
+    'Au': "0",
+    'Re': "0",
+    'Fi': "0",
+    'Bu': "0",
+    'Sbu': "0",
+    'Vo': "(null)",
+    'Ba': "(null)",
+    'Trt': transaction['Split Transaction'],
+    'Mo': "0"
+  }
   const data = {
     filePath: store.state.filePath,
     filePassword: store.state.filePassword,
@@ -339,9 +337,13 @@ function convertNullStringToEmpty(str) {
     return str === "(null)" ? "" : str;
 }
 
+function convertEmptyStringToNull(str) {
+    return str === "" ? "(null)" : str;
+}
+
 const addNewTransaction = () => {
   const newTransaction = {
-    'Transaction Number': transactions.value.next_id,
+    'Transaction Number': transactions.value.next_id.toString(),
     Date: formatDate(),
     Amount: 0,
     Currency: 'EUR',
@@ -351,8 +353,8 @@ const addNewTransaction = () => {
     'Payment Method': '',
     Note: '',
     Marked: 0,
-    'Bank Reference': 0,
-    'Split Transaction': 0,
+    'Bank Reference': "0",
+    'Split Transaction': "0",
     isEditing: true // New transactions are in edit mode by default
   }
   transactions.value.next_id = transactions.value.next_id + 1
@@ -381,8 +383,8 @@ function subCategories(transaction) {
 }
 
 function getTransactionElementId(g, n) {
-  const r = g.value.find(e => e.name === n)
-  return r.id
+  const r = g.find(e => e.name === n)
+  return r ? r.id : '0';
 }
 </script>
 

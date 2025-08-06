@@ -257,4 +257,17 @@ class GrisbiProcess
     {
         return $this->run(['--list-transactions', $accountId, '--pass-word', $this->password, '-'], $filePath);
     }
+
+    /**
+     * Add transactions to the specified GSB file.
+     *
+     * @param string $filePath The path to the GSB file.
+     * @param string $transactionDataJson The transaction Data in Json to add.
+     * @return string The return by the Grisbi script.
+     * @throws \RuntimeException If the script execution fails.
+     */
+    public function addTransactions(string $transactionDataJson, string $filePath): string
+    {
+        return $this->run(['--add-transaction', '--transaction-data', $transactionDataJson, '--pass-word', $this->password, '-'], $filePath);
+    }
 }

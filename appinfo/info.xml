@@ -2,20 +2,21 @@
 <info>
   <id>ncgrisbi</id>
   <name>NCGrisbi</name>
-  <version>0.1.3</version>
+  <version>0.2.0</version>
   <summary>Nextcloud Grisbi Account Manager.</summary>
   <description><![CDATA[# Nextcloud Grisbi Account Manager:
 - * Open gsb file
 - * Accounts Overview
 - * Show Transactions
+- * Add Transactions
 - * Support Encryption
-- * and many others useful tools.]]></description>
+- * and many others useful views.]]></description>
   <licence>AGPL-3.0-only</licence>
   <author mail="imejri@hotmail.com">Moahmed-Ismail MEJRI</author>
   <website>https://github.com/medismail/ncgrisbi</website>
   <bugs>https://github.com/medismail/ncgrisbi/issues</bugs>
   <dependencies>
-    <nextcloud min-version="28" max-version="31"/>
+    <nextcloud min-version="29" max-version="31"/>
   </dependencies>
   <namespace>NCGrisbi</namespace>
   <category>tools</category>

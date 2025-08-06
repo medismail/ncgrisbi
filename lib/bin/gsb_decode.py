@@ -6,6 +6,8 @@ import struct
 V2_MARKER = b"Grisbi encryption v2: "
 V2_MARKER_SIZE = len(V2_MARKER)
 
+password = None
+
 def align_to_8_bytes(length):
     return (length + 7) & (~7)
 
@@ -83,7 +85,7 @@ def set_odd_parity(key):
         key[i] = odd_parity[key[i]]
     return bytes(key)
 
-def encrypt_v2(password, file_content):
+def encrypt_v2(password, file_content_str):
     # Ensure the password is 8 bytes long
     key_bytes = des_string_to_key(password)
     iv = set_odd_parity(key_bytes)
@@ -92,6 +94,7 @@ def encrypt_v2(password, file_content):
     key = DES.new(key_bytes, DES.MODE_CBC, iv)
 
     # Create a temporary buffer that will hold data to be encrypted
+    file_content = file_content_str.encode("utf-8")
     to_encrypt_length = V2_MARKER_SIZE + len(file_content)
     to_encrypt_content = V2_MARKER + file_content
 
@@ -132,6 +135,7 @@ def check_encrypt_gsb(file_content):
     return file_content[:V2_MARKER_SIZE] == V2_MARKER
 
 def read_gsb_file(file_path):
+    global password
     with open(file_path, 'rb') as f:
         file_content = f.read()
     if file_content[:V2_MARKER_SIZE] != V2_MARKER:
@@ -141,8 +145,12 @@ def read_gsb_file(file_path):
         return decrypt_v2(password, file_content)
 
 def write_gsb_file(file_path, file_content):
-    with open(file_path, 'w') as f:
-        f.write(file_content)
+    if (password):
+        with open(file_path, 'wb') as f:
+            f.write(encrypt_v2(password, file_content))
+    else:
+        with open(file_path, 'w') as f:
+            f.write(file_content)
 
 ##def main():
 #    password = ""  # Update this with your password

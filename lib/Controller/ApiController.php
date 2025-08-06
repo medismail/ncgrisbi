@@ -142,8 +142,9 @@ class ApiController extends Controller {
             $contents = $storageHandle->readFile($this->userId, $filePath);
             $process = new GrisbiProcess();
             $process->setPassword($filePassword);
-            $output = $process->run(['--add-transaction', '--transaction-data', $transactionDataJson, '-'], $contents);
-            return new JSONResponse(['success' => true, 'output' => $output]); // You might want to return a more structured response
+            $output = $process->addTransactions($transactionDataJson, $contents);
+            $storageHandle->writeFile($this->userId, $filePath, $output);
+            return new JSONResponse(['success' => true, 'output' => 'TBD']); // You might want to return a more structured response
         }
         return new JSONResponse(['success' => false, 'message' => 'Python not installed']);
     }

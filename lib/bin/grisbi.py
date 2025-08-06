@@ -236,14 +236,14 @@ def extract_data(root):
         account_totals[account_id]['total_amount'] += amount
         if marked == 1:
             account_totals[account_id]['total_marked_amount'] += amount
-        account_totals[account_id]['Currency'] = currencies.get(transaction.get('Cu'), 'Unknown')
+        account_totals[account_id]['Currency'] = { 'id': transaction.get('Cu'), 'name': currencies.get(transaction.get('Cu'), 'Unknown') }
 
     return accounts, parties, transactions, categories, subcategories, payments, account_totals, next_id
 
 def get_stdin_content():
     file_content = b''
     while True:
-        data = sys.stdin.buffer.read(1024)  # lecture par blocs de 1024 octets
+        data = sys.stdin.buffer.read(10240)  # lecture par blocs de 1024 octets
         if not data:
             break
         file_content += data
@@ -272,9 +272,11 @@ if __name__ == "__main__":
         exit()
 
     file_content = ''
+    isEncrypted = False
     if (file_path == '-'):
         crypted_file_content = get_stdin_content()
-        if (gsb_decode.check_encrypt_gsb(crypted_file_content)):
+        isEncrypted = gsb_decode.check_encrypt_gsb(crypted_file_content)
+        if (isEncrypted):
             #password = input("Password: ")
             file_content = gsb_decode.decrypt_v2(args.pass_word, crypted_file_content)
         else:
@@ -301,21 +303,28 @@ if __name__ == "__main__":
             logging.error(f"Error decoding transaction data: {e}")
             exit(1)
 
-        transaction_number = transaction_data.get('Transaction Number')
+        transaction_number = transaction_data.get('Nb')
         existing_transaction = find_transaction_by_number(root, transaction_number)
 
         if existing_transaction is not None:
             for key, value in transaction_data.items():
                 existing_transaction.set(key, str(value)) # Ensure value is a string for XML attribute
-            logging.info(f"Transaction {transaction_number} updated successfully.")
+            #logging.info(f"Transaction {transaction_number} updated successfully.")
         else:
             add_transaction(root, transaction_data)
-            logging.info("New transaction added successfully.")
+            #logging.info("New transaction added successfully.")
 
         # Write the updated XML back to the file
         file_content = write_gsb_content(root)
-        gsb_decode.write_gsb_file(file_path, file_content)
-        logging.info(f"Updated GSB file written to {file_path}")
+        if (file_path == '-'):
+            if (isEncrypted):
+                #password = input("Password: ")
+                sys.stdout.buffer.write(gsb_decode.encrypt_v2(args.pass_word, file_content))
+            else:
+                print(file_content)
+        else:
+            gsb_decode.write_gsb_file(file_path, file_content)
+            logging.info(f"Updated GSB file written to {file_path}")
 
     if args.list_accounts:
         # Get list of accounts in JSON format
