@@ -298,21 +298,27 @@ if __name__ == "__main__":
             exit(1)
 
         try:
-            transaction_data = json.loads(args.transaction_data)
+            transactions_data = json.loads(args.transaction_data)
         except json.JSONDecodeError as e:
             logging.error(f"Error decoding transaction data: {e}")
             exit(1)
 
-        transaction_number = transaction_data.get('Nb')
-        existing_transaction = find_transaction_by_number(root, transaction_number)
+        for transaction_data in transactions_data:
+            transaction_number = transaction_data.get('Nb')
+            isDeleted = transaction_data.get('Delete')
+            existing_transaction = find_transaction_by_number(root, transaction_number)
 
-        if existing_transaction is not None:
-            for key, value in transaction_data.items():
-                existing_transaction.set(key, str(value)) # Ensure value is a string for XML attribute
-            #logging.info(f"Transaction {transaction_number} updated successfully.")
-        else:
-            add_transaction(root, transaction_data)
-            #logging.info("New transaction added successfully.")
+            if existing_transaction is not None:
+                if isDeleted is not None:
+                    root.remove(existing_transaction)
+                else:
+                    for key, value in transaction_data.items():
+                        existing_transaction.set(key, str(value)) # Ensure value is a string for XML attribute
+                    #logging.info(f"Transaction {transaction_number} updated successfully.")
+            else:
+                if isDeleted is None:
+                    add_transaction(root, transaction_data)
+                    #logging.info("New transaction added successfully.")
 
         # Write the updated XML back to the file
         file_content = write_gsb_content(root)

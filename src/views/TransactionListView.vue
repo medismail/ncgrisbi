@@ -27,6 +27,12 @@
       <button @click="addNewTransaction">
         Add Transaction
       </button>
+      <button @click="saveTransactions">
+        Save Transactions
+      </button>
+      <button @click="fetchTransactions">
+        Cancel changes
+      </button>
       <!-- scroll container -->
       <div class="grid-scroll">
         <div class="transaction-wrapper">
@@ -148,12 +154,12 @@
                 <span class="col-actions">
                   <button
                     v-if="!t.isEditing"
-                    @click="t.isEditing=true"
+                    @click="editTransaction(t)"
                   >Edit</button>
                   <button
                     v-else
-                    @click="saveTransaction(t)"
-                  >Save</button>
+                    @click="deleteTransaction(t['Transaction Number'])"
+                  >Delete</button>
                 </span>
               </DynamicScrollerItem>
             </template>
@@ -176,7 +182,8 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 const store = useStore()
 const route = useRoute()
 const transactions = ref({})
-const reversedTransactions = computed(() => transactions.value.transactions.slice().reverse())
+//const reversedTransactions = computed(() => transactions.value.transactions.slice().reverse())
+const reversedTransactions = computed(() => [...transactions.value.transactions].reverse())
 const loading = ref(true)
 const selectedAccountId = ref(route.params.id)
 const languageCode = ref('en')
@@ -187,6 +194,8 @@ const categoryMap = computed(() => {
   categories.value.forEach(c => map.set(c.name, c.subcategories || []))
   return map
 })
+const subCategories = transaction => categoryMap.value.get(transaction.Category) ?? []
+var transactionsDelete = []
 
 // Fetch transactions from API
 const fetchTransactions = async () => {
@@ -269,61 +278,93 @@ watch(() => route.params.id, (newId) => {
   fetchTransactions()
 })
 
-const saveTransaction = async (transaction) => {
-  const subcategoryList = subCategories(transaction)
-  const formatedTransaction = {
-    'Ac': selectedAccountId.value,
-    'Nb': transaction['Transaction Number'],
-    'Id': "(null)",
-    'Dt': transaction['Date'],
-    'Dv': "(null)",
-    'Cu': transactions.value.currency.id,
-    'Am': transaction['Amount'].toString(),
-    'Exb': "0",
-    'Exr': "0.00",
-    'Exf': "0.00",
-    'Pa': getTransactionElementId(parties.value, transaction['Party']),
-    'Ca': getTransactionElementId(categories.value, transaction['Category']),
-    'Sca': getTransactionElementId(subcategoryList, transaction['Subcategory']),
-    'Br': transaction['Bank Reference'],
-    'No': convertEmptyStringToNull(transaction['Note']),
-    'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method']),
-    'Pc': "(null)",
-    'Ma': transaction['Marked'].toString(),
-    'Ar': "0",
-    'Au': "0",
-    'Re': "0",
-    'Fi': "0",
-    'Bu': "0",
-    'Sbu': "0",
-    'Vo': "(null)",
-    'Ba': "(null)",
-    'Trt': transaction['Split Transaction'],
-    'Mo': "0"
-  }
-  const data = {
-    filePath: store.state.filePath,
-    filePassword: store.state.filePassword,
-    transactionDataJson: JSON.stringify(formatedTransaction), // Send the transaction object as a JSON string
-  };
+const saveTransactions = async () => {
+  loading.value = true
+  const formatedTransactions = []
+  const transactionsList = transactions.value.transactions.filter((t) => t.isEditing)
+  if (transactionsList.length > 0 || transactionsDelete.length > 0) {
+    transactionsList.forEach(transaction => {
+      const subcategoryList = subCategories(transaction)
+      const formatedTransaction = {
+        'Ac': selectedAccountId.value,
+        'Nb': transaction['Transaction Number'],
+        'Id': "(null)",
+        'Dt': transaction['Date'],
+        'Dv': "(null)",
+        'Cu': transactions.value.currency.id,
+        'Am': transaction['Amount'].toString(),
+        'Exb': "0",
+        'Exr': "0.00",
+        'Exf': "0.00",
+        'Pa': getTransactionElementId(parties.value, transaction['Party']),
+        'Ca': getTransactionElementId(categories.value, transaction['Category']),
+        'Sca': getTransactionElementId(subcategoryList, transaction['Subcategory']),
+        'Br': transaction['Bank Reference'],
+        'No': convertEmptyStringToNull(transaction['Note']),
+        'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method']),
+        'Pc': "(null)",
+        'Ma': transaction['Marked'].toString(),
+        'Ar': "0",
+        'Au': "0",
+        'Re': "0",
+        'Fi': "0",
+        'Bu': "0",
+        'Sbu': "0",
+        'Vo': "(null)",
+        'Ba': "(null)",
+        'Trt': transaction['Split Transaction'],
+        'Mo': "0"
+      }
+      formatedTransactions.push(formatedTransaction)
+    })
 
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  };
+    transactionsDelete.forEach(number => {
+      const formatedTransaction = {
+        'Nb': number,
+        'Delete': "True"
+      }
+      formatedTransactions.push(formatedTransaction)
+    })
+    const data = {
+      filePath: store.state.filePath,
+      filePassword: store.state.filePassword,
+      transactionDataJson: JSON.stringify(formatedTransactions), // Send the transaction object as a JSON string
+    };
 
-  try {
-    const response = await fetch('/apps/ncgrisbi/api/savetransaction', requestOptions);
-    if (response.ok) {
-      transaction.isEditing = false; // Exit edit mode on successful save
+    const requestOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    };
+
+    try {
+      const response = await fetch('/apps/ncgrisbi/api/savetransaction', requestOptions);
+      if (response.ok) {
+        transactionsList.forEach(transaction => {
+          transaction.isEditing = false; // Exit edit mode on successful save
+          transactions.value.total_amount = transactions.value.total_amount + transaction.Amount
+          if (transaction.Marked == 1) {
+            transactions.value.total_marked_amount = transactions.value.total_marked_amount + transaction.Amount
+          }
+        })
+        transactionsDelete = []
+      }
+    } catch (error) {
+      console.error('Failed to save transaction:', error);
     }
-  } catch (error) {
-    console.error('Failed to save transaction:', error);
   }
+  loading.value = false
 };
+
+function editTransaction(t) {
+  t.isEditing=true
+  transactions.value.total_amount = transactions.value.total_amount - t.Amount
+  if (t.Marked == 1) {
+    transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Amount
+  }
+}
 
 const formatDate = () => {
   const current = new Date()
@@ -377,14 +418,15 @@ function onPartyChange(t) {
   }
 }
 
-// reactive list of sub-categories
-function subCategories(transaction) {
-  return categoryMap.value.get(transaction.Category) || []
-}
-
 function getTransactionElementId(g, n) {
   const r = g.find(e => e.name === n)
   return r ? r.id : '0';
+}
+
+function deleteTransaction(number) {
+  if (!transactionsDelete.includes(number)) transactionsDelete.push(number)
+  const index = transactions.value.transactions.findIndex(t => t['Transaction Number'] === number)
+  transactions.value.transactions.splice(index, 1)
 }
 </script>
 
