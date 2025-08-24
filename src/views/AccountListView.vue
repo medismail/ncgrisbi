@@ -25,6 +25,9 @@
         </template>
       </NcAppNavigationItem>
     </template>
+    <template #footer>
+      <button @click="closeFile">Close File</button>
+    </template>
   </NcAppNavigation>
 
   <NcAppContent
@@ -60,6 +63,11 @@ const accounts = ref([])
 const loading = ref(false)
 const languageCode = ref('en')
 
+const closeFile = () => {
+  store.commit('setFilePath', '')
+  store.commit('setFilePassword', '')
+  router.push('/')
+}
 function safeParse(jsonStr) {
   if (!jsonStr) return []
   try {

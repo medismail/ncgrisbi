@@ -186,6 +186,7 @@ const transactions = ref({})
 const reversedTransactions = computed(() => [...transactions.value.transactions].reverse())
 const loading = ref(true)
 const selectedAccountId = ref(route.params.id)
+const hasUnsavedChanges = ref(false)
 const languageCode = ref('en')
 const parties = ref([])
 const categories = ref([])
@@ -198,9 +199,18 @@ const subCategories = transaction => categoryMap.value.get(transaction.Category)
 var transactionsDelete = []
 
 // Fetch transactions from API
-const fetchTransactions = async () => {
+const fetchTransactions = async (accountId) => {
+  // Check for unsaved changes before fetching new transactions
+ if (hasUnsavedChanges.value) {
+    if (await showConfirmationDialog()) {
+      // If user chooses to save, wait for save to complete before fetching
+ await saveTransactions()
+    } else {
+      // If user cancels the dialog or chooses not to save, don't fetch
+      return
+    }
+  }
   loading.value = true
-
   languageCode.value = getLanguage()
   const data = { filePath: store.state.filePath, filePassword: store.state.filePassword }
   const jsonData = JSON.stringify(data)
@@ -214,11 +224,12 @@ const fetchTransactions = async () => {
   try {
     const response = await fetch('/apps/ncgrisbi/api/account/' + selectedAccountId.value, requestOptions)
     const data = await response.json();
+    hasUnsavedChanges.value = false // Reset unsaved changes flag
     // Initialize isEditing property for each transaction
     if (data && data.transactions) {
       data.transactions.forEach(transaction => {
-        transaction.isEditing = false;
-      });
+        transaction.isEditing = false
+      })
     }
     transactions.value = data;
   } catch (error) {
@@ -248,6 +259,7 @@ const fetchParties = async () => {
 };
 
 // Fetch categories from API
+// Fetch categories from API
 const fetchCategories = async () => {
   const data = { filePath: store.state.filePath, filePassword: store.state.filePassword };
   const jsonData = JSON.stringify(data);
@@ -267,12 +279,30 @@ const fetchCategories = async () => {
   }
 };
 
+// Show confirmation dialog
+const showConfirmationDialog = async () => {
+  return new Promise((resolve) => {
+    const confirmed = confirm('You have unsaved changes. Do you want to save them before switching accounts?');
+    resolve(confirmed);
+  });
+}
+
 // Call fetchTransactions function when component is mounted
 onMounted(fetchParties);
 onMounted(fetchCategories);
 onMounted(fetchTransactions)
 
 // Watch for changes to route.params.id and refetch transactions if it changes
+// Watch for changes to route.params.id and refetch transactions if it changes
+watch(() => route.params.id, async (newId) => {
+  if (hasUnsavedChanges.value) {
+    if (await showConfirmationDialog()) {
+      await saveTransactions()
+    }
+  }
+  selectedAccountId.value = newId
+  fetchTransactions(newId)
+})
 watch(() => route.params.id, (newId) => {
   selectedAccountId.value = newId
   fetchTransactions()
@@ -349,6 +379,7 @@ const saveTransactions = async () => {
             transactions.value.total_marked_amount = transactions.value.total_marked_amount + transaction.Amount
           }
         })
+        hasUnsavedChanges.value = false // Reset unsaved changes flag after successful save
         transactionsDelete = []
       }
     } catch (error) {
@@ -358,6 +389,7 @@ const saveTransactions = async () => {
   loading.value = false
 };
 
+// Edit transaction
 function editTransaction(t) {
   t.isEditing=true
   transactions.value.total_amount = transactions.value.total_amount - t.Amount
@@ -366,6 +398,7 @@ function editTransaction(t) {
   }
 }
 
+// Format date
 const formatDate = () => {
   const current = new Date()
   const month = (current.getMonth() + 1).toString().padStart(2, '0')
@@ -374,14 +407,17 @@ const formatDate = () => {
   return `${month}/${day}/${year}`;
 }
 
+// Convert null string to empty string
 function convertNullStringToEmpty(str) {
     return str === "(null)" ? "" : str;
 }
 
+// Convert empty string to null string
 function convertEmptyStringToNull(str) {
     return str === "" ? "(null)" : str;
 }
 
+// Add new transaction
 const addNewTransaction = () => {
   const newTransaction = {
     'Transaction Number': transactions.value.next_id.toString(),
@@ -398,6 +434,7 @@ const addNewTransaction = () => {
     'Split Transaction': "0",
     isEditing: true // New transactions are in edit mode by default
   }
+  hasUnsavedChanges.value = true // Mark as unsaved changes when adding a new transaction
   transactions.value.next_id = transactions.value.next_id + 1
   transactions.value.transactions.push(newTransaction)
 }
@@ -418,11 +455,13 @@ function onPartyChange(t) {
   }
 }
 
+// Get transaction element ID
 function getTransactionElementId(g, n) {
   const r = g.find(e => e.name === n)
   return r ? r.id : '0';
 }
 
+// Delete transaction
 function deleteTransaction(number) {
   if (!transactionsDelete.includes(number)) transactionsDelete.push(number)
   const index = transactions.value.transactions.findIndex(t => t['Transaction Number'] === number)
