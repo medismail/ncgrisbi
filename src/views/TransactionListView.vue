@@ -374,8 +374,8 @@ const saveTransactions = async () => {
       if (response.ok) {
         transactionsList.forEach(transaction => {
           transaction.isEditing = false; // Exit edit mode on successful save
-          transactions.value.total_amount = transactions.value.total_amount + transaction.Amount
-          if (transaction.Marked == 1) {
+          transactions.value.total_amount = transactions.value.total_amount - transaction.originalAmount + transaction.Amount;
+          if (transaction.Marked !== transaction.originalMarked) {
             transactions.value.total_marked_amount = transactions.value.total_marked_amount + transaction.Amount
           }
         })
@@ -392,8 +392,8 @@ const saveTransactions = async () => {
 // Edit transaction
 function editTransaction(t) {
   t.isEditing=true
-  transactions.value.total_amount = transactions.value.total_amount - t.Amount
-  if (t.Marked == 1) {
+  t.originalAmount = t.Amount; // Store original amount
+  t.originalMarked = t.Marked; // Store original marked status
     transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Amount
   }
 }
