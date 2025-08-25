@@ -199,17 +199,7 @@ const subCategories = transaction => categoryMap.value.get(transaction.Category)
 var transactionsDelete = []
 
 // Fetch transactions from API
-const fetchTransactions = async (accountId) => {
-  // Check for unsaved changes before fetching new transactions
- if (hasUnsavedChanges.value) {
-    if (await showConfirmationDialog()) {
-      // If user chooses to save, wait for save to complete before fetching
- await saveTransactions()
-    } else {
-      // If user cancels the dialog or chooses not to save, don't fetch
-      return
-    }
-  }
+const fetchTransactions = async () => {
   loading.value = true
   languageCode.value = getLanguage()
   const data = { filePath: store.state.filePath, filePassword: store.state.filePassword }
@@ -259,7 +249,6 @@ const fetchParties = async () => {
 };
 
 // Fetch categories from API
-// Fetch categories from API
 const fetchCategories = async () => {
   const data = { filePath: store.state.filePath, filePassword: store.state.filePassword };
   const jsonData = JSON.stringify(data);
@@ -293,17 +282,12 @@ onMounted(fetchCategories);
 onMounted(fetchTransactions)
 
 // Watch for changes to route.params.id and refetch transactions if it changes
-// Watch for changes to route.params.id and refetch transactions if it changes
 watch(() => route.params.id, async (newId) => {
   if (hasUnsavedChanges.value) {
     if (await showConfirmationDialog()) {
       await saveTransactions()
     }
   }
-  selectedAccountId.value = newId
-  fetchTransactions(newId)
-})
-watch(() => route.params.id, (newId) => {
   selectedAccountId.value = newId
   fetchTransactions()
 })
@@ -375,9 +359,7 @@ const saveTransactions = async () => {
         transactionsList.forEach(transaction => {
           transaction.isEditing = false; // Exit edit mode on successful save
           transactions.value.total_amount = transactions.value.total_amount - transaction.originalAmount + transaction.Amount;
-          if (transaction.Marked !== transaction.originalMarked) {
-            transactions.value.total_marked_amount = transactions.value.total_marked_amount + transaction.Amount
-          }
+          transactions.value.total_marked_amount = transactions.value.total_marked_amount - transaction.originalAmount * transaction.originalMarked + transaction.Amount * transaction.Marked
         })
         hasUnsavedChanges.value = false // Reset unsaved changes flag after successful save
         transactionsDelete = []
@@ -394,8 +376,7 @@ function editTransaction(t) {
   t.isEditing=true
   t.originalAmount = t.Amount; // Store original amount
   t.originalMarked = t.Marked; // Store original marked status
-    transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Amount
-  }
+  hasUnsavedChanges.value = true // Mark as unsaved changes when edit a transaction
 }
 
 // Format date
@@ -522,7 +503,7 @@ function deleteTransaction(number) {
 }
 
 .bright-row input{
- color: #ffffff;
+ color: var(--color-main-text);
  border-color: #bbbbbb;
 }
 

@@ -59,6 +59,7 @@ appstore:
 	--exclude="../$(app_name)/stylelint.config.js" \
 	--exclude="../$(app_name)/vue.config.js" \
 	--exclude="../$(app_name)/src" \
+	--exclude="../$(app_name)/lib/bin/__pycache__" \
 	../$(app_name)
 
 .PHONY: fixcode

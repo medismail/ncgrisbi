@@ -26,7 +26,9 @@
       </NcAppNavigationItem>
     </template>
     <template #footer>
-      <button @click="closeFile">Close File</button>
+      <button @click="closeFile">
+        Close File
+      </button>
     </template>
   </NcAppNavigation>
 
