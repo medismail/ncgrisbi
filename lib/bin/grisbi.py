@@ -67,7 +67,7 @@ def write_gsb_content(root):
     return f.getvalue().decode('utf-8')
 
 def get_parties_json(parties):
-    partie_list = [{'id': partie_id, 'name': partie_info['name'], 'last_amount': partie_info['last_amount'], 'last_category': partie_info['last_category'], 'last_subcategory': partie_info['last_subcategory']} for partie_id, partie_info in parties.items()]
+    partie_list = [{'id': partie_id, 'name': partie_info['name'], 'last_amount': partie_info['last_amount'], 'last_category': partie_info['last_category'], 'last_subcategory': partie_info['last_subcategory'], 'last_pm': partie_info['last_pm'], 'last_note': partie_info['last_note']} for partie_id, partie_info in parties.items()]
     return json.dumps(partie_list, indent=4)
 
 def get_categories_json(categories, subcategories):
@@ -120,7 +120,7 @@ def extract_data(root):
     for party in root.findall('Party'):
         party_id = party.get('Nb')
         party_name = party.get('Na')
-        parties[party_id] = { 'name': party_name, 'last_amount': 0, 'last_category': '', 'last_subcategory': '' }
+        parties[party_id] = { 'name': party_name, 'last_amount': 0, 'last_category': '', 'last_subcategory': '', 'last_pm': '', 'last_note': '' }
 
     # Extract categories and subcategories
     categories = {}
@@ -180,29 +180,49 @@ def extract_data(root):
 
     # Extract transactions
     next_id = 0
+    nb_to_idx = {}
     transactions = []
-    for transaction in root.findall('Transaction'):
+    for idx, transaction in enumerate(root.findall('Transaction')):
+        # Get account info including bank number
         account_id = transaction.get('Ac')
+        account_info = accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})
+        bank_name = banks.get(account_info['bank'], 'Unknown')  # Look up the bank name
+
         amount = Decimal(transaction.get('Am', '0.00'))
         marked = int(transaction.get('Ma', '0'))
         next_id = transaction.get('Nb')
         party_id = transaction.get('Pa')
-        category = categories.get(transaction.get('Ca'), 'Uncategorized')
-        subcategory = subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized')
+        pm = payments.get(transaction.get('Pn'), { 'name': 'Unknown' })['name']
+        st = transaction.get('Trt')
+        if (st != '0'):
+            category = 'Transfer'
+            idost = nb_to_idx.get(st)
+            if (idost):
+                subcategory = transactions[idost]['Account']
+                transactions[idost]['Subcategory'] = account_info['name']
+            else:
+                nb_to_idx[next_id] = idx
+                subcategory = ''
+        else:
+            idost = 0
+            category = categories.get(transaction.get('Ca'), 'Uncategorized')
+            subcategory = subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized')
+
         #if party_id and party_id in parties:
         if int(party_id):
-            parties[party_id]['last_amount'] = float(amount)
-            parties[party_id]['last_category'] = category
-            parties[party_id]['last_subcategory'] = subcategory
-
-        # Get account info including bank number
-        account_info = accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})
-        bank_name = banks.get(account_info['bank'], 'Unknown')  # Look up the bank name
+            if (idost):
+                parties[party_id]['last_subcategory'] = account_info['name']
+            else:
+                parties[party_id]['last_amount'] = float(amount)
+                parties[party_id]['last_category'] = category
+                parties[party_id]['last_subcategory'] = subcategory
+                parties[party_id]['last_pm'] = pm
+                parties[party_id]['last_note'] = transaction.get('No')
 
         transaction_data = {
             'Account': account_info['name'],
 #            'Bank': banks.get(account_info['bank'], 'Unknown'),
-            'Transaction Number': next_id,
+            'TxNb': next_id,
 #            'Transaction ID': transaction.get('Id'),
             'Date': transaction.get('Dt'),
 #            'Value Date': transaction.get('Dv'),
@@ -214,10 +234,10 @@ def extract_data(root):
             'Party': parties.get(party_id, { 'name': 'Unknown' })['name'],
             'Category': category,
             'Subcategory': subcategory,
-            'Bank Reference': transaction.get('Br'),
+            'BR': transaction.get('Br'),
             'Note': transaction.get('No'),
-            'Payment Method': payments.get(transaction.get('Pn'), { 'name': 'Unknown' })['name'],
-            'Payment Method Content': transaction.get('Pc'),
+            'PM': pm,
+            'PMC': transaction.get('Pc'),
             'Marked': marked,
 #            'Archive Number': transaction.get('Ar'),
 #            'Automatic Transaction': transaction.get('Au'),
@@ -227,7 +247,7 @@ def extract_data(root):
 #            'Subbudgetary Number': transaction.get('Sbu'),
 #            'Voucher': transaction.get('Vo'),
 #            'Bank References': transaction.get('Ba'),
-            'Split Transaction': transaction.get('Trt'),
+            'STx': transaction.get('Trt'),
 #            'Mother Transaction Number': transaction.get('Mo'),
         }
         transactions.append(transaction_data)

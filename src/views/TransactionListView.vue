@@ -53,7 +53,7 @@
             class="scroller"
             :items="reversedTransactions"
             :min-item-size="48"
-            key-field="Transaction Number"
+            key-field="TxNb"
           >
             <template #default="{ item: t, index, active }">
               <DynamicScrollerItem
@@ -64,7 +64,7 @@
                 :active="active"
                 :data-index="index"
               >
-                <span class="col-n">{{ t['Transaction Number'] }}</span>
+                <span class="col-n">{{ t['TxNb'] }}</span>
                 <span class="col-date"><input
                   v-model="t.Date"
                   :disabled="!t.isEditing"
@@ -73,6 +73,7 @@
                   v-model="t.Amount"
                   type="number"
                   :disabled="!t.isEditing"
+                  @input="() => onAmountChange(t)"
                 ></span>
                 <span class="col-party"><input
                                           v-model="t.Party"
@@ -119,7 +120,7 @@
                   </datalist>
                 </span>
                 <span class="col-pm"><input
-                                       v-model="t['Payment Method']"
+                                       v-model="t.PM"
                                        :list="'PM-'+index"
                                        :disabled="!t.isEditing"
                                      >
@@ -141,14 +142,14 @@
                   type="checkbox"
                   :checked="t.Marked===1"
                   :disabled="!t.isEditing"
-                  @change="t.Marked = $event.target.checked ? 1 : 0"
+                  @change="onMarkedChange(t, $event)"
                 ></span>
                 <span class="col-bref"><input
-                  v-model="t['Bank Reference']"
+                  v-model="t.BR"
                   :disabled="!t.isEditing"
                 ></span>
                 <span class="col-split"><input
-                  v-model="t['Split Transaction']"
+                  v-model="t.STx"
                   :disabled="!t.isEditing"
                 ></span>
                 <span class="col-actions">
@@ -158,7 +159,7 @@
                   >Edit</button>
                   <button
                     v-else
-                    @click="deleteTransaction(t['Transaction Number'])"
+                    @click="deleteTransaction(t.TxNb, t.STx)"
                   >Delete</button>
                 </span>
               </DynamicScrollerItem>
@@ -188,6 +189,7 @@ const loading = ref(true)
 const selectedAccountId = ref(route.params.id)
 const hasUnsavedChanges = ref(false)
 const languageCode = ref('en')
+const accounts = computed(() => store.state.accounts)
 const parties = ref([])
 const categories = ref([])
 const categoryMap = computed(() => {
@@ -263,6 +265,19 @@ const fetchCategories = async () => {
     const response = await fetch('/apps/ncgrisbi/api/categories', requestOptions);
     const data = await response.json();
     categories.value = data;
+    const newCategory = {
+      id: '0',
+      name: 'Transfer',
+      subcategories: []
+    }
+    accounts.value.forEach(account => {
+      const subcategory = {
+        'id': account.id,
+        'name': account.name
+      }
+      newCategory.subcategories.push(subcategory)
+    })
+    categories.value.push(newCategory)
   } catch (error) {
     console.error('Failed to fetch categories:', error);
   }
@@ -299,9 +314,17 @@ const saveTransactions = async () => {
   if (transactionsList.length > 0 || transactionsDelete.length > 0) {
     transactionsList.forEach(transaction => {
       const subcategoryList = subCategories(transaction)
+      const partyid = getTransactionElementId(parties.value, transaction['Party'])
+      const catid = getTransactionElementId(categories.value, transaction['Category'])
+      var subcatid = getTransactionElementId(subcategoryList, transaction['Subcategory'])
+      if (( transaction['Category'] == 'Transfer') && (catid == '0') && (subcatid != '0') && (subcatid != 'selectedAccountId.value')) {
+        subcatid = '0'
+        transaction['STx'] = transactions.value.next_id.toString()
+        transactions.value.next_id = transactions.value.next_id + 1
+      }
       const formatedTransaction = {
         'Ac': selectedAccountId.value,
-        'Nb': transaction['Transaction Number'],
+        'Nb': transaction['TxNb'],
         'Id': "(null)",
         'Dt': transaction['Date'],
         'Dv': "(null)",
@@ -310,12 +333,12 @@ const saveTransactions = async () => {
         'Exb': "0",
         'Exr': "0.00",
         'Exf': "0.00",
-        'Pa': getTransactionElementId(parties.value, transaction['Party']),
-        'Ca': getTransactionElementId(categories.value, transaction['Category']),
-        'Sca': getTransactionElementId(subcategoryList, transaction['Subcategory']),
-        'Br': transaction['Bank Reference'],
+        'Pa': partyid,
+        'Ca': catid,
+        'Sca': subcatid,
+        'Br': transaction['BR'],
         'No': convertEmptyStringToNull(transaction['Note']),
-        'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['Payment Method']),
+        'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['PM']),
         'Pc': "(null)",
         'Ma': transaction['Marked'].toString(),
         'Ar': "0",
@@ -326,10 +349,43 @@ const saveTransactions = async () => {
         'Sbu': "0",
         'Vo': "(null)",
         'Ba': "(null)",
-        'Trt': transaction['Split Transaction'],
+        'Trt': transaction['STx'],
         'Mo': "0"
       }
       formatedTransactions.push(formatedTransaction)
+      if (transaction['STx'] !== "0") {
+        const formatedSplitTransaction = {
+          'Ac': getTransactionElementId(accounts.value, transaction['Subcategory']),
+          'Nb': transaction['STx'],
+          'Id': "(null)",
+          'Dt': transaction['Date'],
+          'Dv': "(null)",
+          'Cu': transactions.value.currency.id,
+          'Am': (-transaction['Amount']).toString(),
+          'Exb': "0",
+          'Exr': "0.00",
+          'Exf': "0.00",
+          'Pa': partyid,
+          'Ca': catid,
+          'Sca': subcatid,
+          'Br': transaction['BR'],
+          'No': "(null)",
+          'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['PM']),
+          'Pc': "(null)",
+          'Ma': "0",
+          'Ar': "0",
+          'Au': "0",
+          'Re': "0",
+          'Fi': "0",
+          'Bu': "0",
+          'Sbu': "0",
+          'Vo': "(null)",
+          'Ba': "(null)",
+          'Trt': transaction['TxNb'],
+          'Mo': "0"
+        }
+        formatedTransactions.push(formatedSplitTransaction)
+      }
     })
 
     transactionsDelete.forEach(number => {
@@ -358,8 +414,6 @@ const saveTransactions = async () => {
       if (response.ok) {
         transactionsList.forEach(transaction => {
           transaction.isEditing = false; // Exit edit mode on successful save
-          transactions.value.total_amount = transactions.value.total_amount - transaction.originalAmount + transaction.Amount;
-          transactions.value.total_marked_amount = transactions.value.total_marked_amount - transaction.originalAmount * transaction.originalMarked + transaction.Amount * transaction.Marked
         })
         hasUnsavedChanges.value = false // Reset unsaved changes flag after successful save
         transactionsDelete = []
@@ -375,7 +429,6 @@ const saveTransactions = async () => {
 function editTransaction(t) {
   t.isEditing=true
   t.originalAmount = t.Amount; // Store original amount
-  t.originalMarked = t.Marked; // Store original marked status
   hasUnsavedChanges.value = true // Mark as unsaved changes when edit a transaction
 }
 
@@ -401,18 +454,19 @@ function convertEmptyStringToNull(str) {
 // Add new transaction
 const addNewTransaction = () => {
   const newTransaction = {
-    'Transaction Number': transactions.value.next_id.toString(),
+    TxNb: transactions.value.next_id.toString(),
     Date: formatDate(),
     Amount: 0,
     Currency: 'EUR',
     Party: '',
     Category: '',
     Subcategory: '',
-    'Payment Method': '',
+    PM: '',
     Note: '',
     Marked: 0,
-    'Bank Reference': "0",
-    'Split Transaction': "0",
+    BR: "0",
+    STx: "0",
+    originalAmount: 0,
     isEditing: true // New transactions are in edit mode by default
   }
   hasUnsavedChanges.value = true // Mark as unsaved changes when adding a new transaction
@@ -426,6 +480,7 @@ function onPartyChange(t) {
   if (party) {
     if (t.Amount == 0) { 
       t.Amount = party.last_amount
+      onAmountChange(t)
     }
     if (t.Category == '') {
       t.Category = party.last_category
@@ -433,6 +488,28 @@ function onPartyChange(t) {
     if (t.Subcategory == '') {
       t.Subcategory = party.last_subcategory
     }
+    if (t.PM == '') {
+      t.PM = party.last_pm
+    }
+    if (t.Note == '') {
+      t.Note = party.last_note
+    }
+  }
+}
+
+function onAmountChange(t) {
+  transactions.value.total_amount = transactions.value.total_amount - t.originalAmount + t.Amount
+  if (t.Marked != '0') transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.originalAmount + t.Amount
+  t.originalAmount = t.Amount
+}
+
+function onMarkedChange(t, e) {
+  if (e.target.checked) {
+     t.Marked = '1'
+     transactions.value.total_marked_amount = transactions.value.total_marked_amount + t.Amount
+  } else {
+     t.Marked = '0'
+     transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Amount
   }
 }
 
@@ -443,9 +520,10 @@ function getTransactionElementId(g, n) {
 }
 
 // Delete transaction
-function deleteTransaction(number) {
+function deleteTransaction(number, snb) {
   if (!transactionsDelete.includes(number)) transactionsDelete.push(number)
-  const index = transactions.value.transactions.findIndex(t => t['Transaction Number'] === number)
+  if ((snb != '0')&&(!transactionsDelete.includes(snb))) transactionsDelete.push(snb)
+  const index = transactions.value.transactions.findIndex(t => t['TxNb'] === number)
   transactions.value.transactions.splice(index, 1)
 }
 </script>
