@@ -70,13 +70,13 @@
                   :disabled="!t.isEditing"
                 ></span>
                 <span class="col-amount"><input
-                  v-model="t.Amount"
+                  v-model="t.Am"
                   type="number"
                   :disabled="!t.isEditing"
                   @input="() => onAmountChange(t)"
                 ></span>
                 <span class="col-party"><input
-                                          v-model="t.Party"
+                                          v-model="t.Pa"
                                           :list="'P-'+index"
                                           :disabled="!t.isEditing"
                                           @input="() => onPartyChange(t)"
@@ -92,10 +92,10 @@
                 </span>
                 <span class="col-cat">
                   <input
-                    v-model="t.Category"
+                    v-model="t.Cat"
                     :list="'C-'+index"
                     :disabled="!t.isEditing"
-                    @input="t.Subcategory=''"
+                    @input="t.SCat=''"
                   >
                   <datalist :id="'C-'+index">
                     <option
@@ -106,7 +106,7 @@
                     </option>
                   </datalist>
                   (<input
-                    v-model="t.Subcategory"
+                    v-model="t.SCat"
                     :list="'S-'+index"
                     :disabled="!t.isEditing"
                   >)
@@ -140,7 +140,7 @@
                 ></span>
                 <span class="col-mark"><input
                   type="checkbox"
-                  :checked="t.Marked===1"
+                  :checked="t.Ma===1"
                   :disabled="!t.isEditing"
                   @change="onMarkedChange(t, $event)"
                 ></span>
@@ -197,7 +197,7 @@ const categoryMap = computed(() => {
   categories.value.forEach(c => map.set(c.name, c.subcategories || []))
   return map
 })
-const subCategories = transaction => categoryMap.value.get(transaction.Category) ?? []
+const subCategories = transaction => categoryMap.value.get(transaction.Cat) ?? []
 var transactionsDelete = []
 
 // Fetch transactions from API
@@ -314,10 +314,10 @@ const saveTransactions = async () => {
   if (transactionsList.length > 0 || transactionsDelete.length > 0) {
     transactionsList.forEach(transaction => {
       const subcategoryList = subCategories(transaction)
-      const partyid = getTransactionElementId(parties.value, transaction['Party'])
-      const catid = getTransactionElementId(categories.value, transaction['Category'])
-      var subcatid = getTransactionElementId(subcategoryList, transaction['Subcategory'])
-      if (( transaction['Category'] == 'Transfer') && (catid == '0') && (subcatid != '0') && (subcatid != 'selectedAccountId.value')) {
+      const partyid = getTransactionElementId(parties.value, transaction['Pa'])
+      const catid = getTransactionElementId(categories.value, transaction['Cat'])
+      var subcatid = getTransactionElementId(subcategoryList, transaction['SCat'])
+      if (( transaction['Cat'] == 'Transfer') && (catid == '0') && (subcatid != '0') && (subcatid != 'selectedAccountId.value')) {
         subcatid = '0'
         transaction['STx'] = transactions.value.next_id.toString()
         transactions.value.next_id = transactions.value.next_id + 1
@@ -329,7 +329,7 @@ const saveTransactions = async () => {
         'Dt': transaction['Date'],
         'Dv': "(null)",
         'Cu': transactions.value.currency.id,
-        'Am': transaction['Amount'].toString(),
+        'Am': transaction['Am'].toString(),
         'Exb': "0",
         'Exr': "0.00",
         'Exf': "0.00",
@@ -340,7 +340,7 @@ const saveTransactions = async () => {
         'No': convertEmptyStringToNull(transaction['Note']),
         'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['PM']),
         'Pc': "(null)",
-        'Ma': transaction['Marked'].toString(),
+        'Ma': transaction['Ma'].toString(),
         'Ar': "0",
         'Au': "0",
         'Re': "0",
@@ -355,13 +355,13 @@ const saveTransactions = async () => {
       formatedTransactions.push(formatedTransaction)
       if (transaction['STx'] !== "0") {
         const formatedSplitTransaction = {
-          'Ac': getTransactionElementId(accounts.value, transaction['Subcategory']),
+          'Ac': getTransactionElementId(accounts.value, transaction['SCat']),
           'Nb': transaction['STx'],
           'Id': "(null)",
           'Dt': transaction['Date'],
           'Dv': "(null)",
           'Cu': transactions.value.currency.id,
-          'Am': (-transaction['Amount']).toString(),
+          'Am': (-transaction['Am']).toString(),
           'Exb': "0",
           'Exr': "0.00",
           'Exf': "0.00",
@@ -428,7 +428,7 @@ const saveTransactions = async () => {
 // Edit transaction
 function editTransaction(t) {
   t.isEditing=true
-  t.originalAmount = t.Amount; // Store original amount
+  t.originalAmount = t.Am; // Store original amount
   hasUnsavedChanges.value = true // Mark as unsaved changes when edit a transaction
 }
 
@@ -456,14 +456,14 @@ const addNewTransaction = () => {
   const newTransaction = {
     TxNb: transactions.value.next_id.toString(),
     Date: formatDate(),
-    Amount: 0,
-    Currency: 'EUR',
-    Party: '',
-    Category: '',
-    Subcategory: '',
+    Am: 0,
+    Cur: transactions.currency.name,
+    Pa: '',
+    Cat: '',
+    SCat: '',
     PM: '',
     Note: '',
-    Marked: 0,
+    Ma: 0,
     BR: "0",
     STx: "0",
     originalAmount: 0,
@@ -476,17 +476,17 @@ const addNewTransaction = () => {
 
 // Update Amount Category ans SubCategory on Party changes
 function onPartyChange(t) {
-  const party = parties.value.find(p => p.name === t.Party)
+  const party = parties.value.find(p => p.name === t.Pa)
   if (party) {
-    if (t.Amount == 0) { 
-      t.Amount = party.last_amount
+    if (t.Am == 0) { 
+      t.Am = party.last_amount
       onAmountChange(t)
     }
-    if (t.Category == '') {
-      t.Category = party.last_category
+    if (t.Cat == '') {
+      t.Cat = party.last_category
     }
-    if (t.Subcategory == '') {
-      t.Subcategory = party.last_subcategory
+    if (t.SCat == '') {
+      t.SCat = party.last_subcategory
     }
     if (t.PM == '') {
       t.PM = party.last_pm
@@ -498,18 +498,18 @@ function onPartyChange(t) {
 }
 
 function onAmountChange(t) {
-  transactions.value.total_amount = transactions.value.total_amount - t.originalAmount + t.Amount
-  if (t.Marked != '0') transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.originalAmount + t.Amount
-  t.originalAmount = t.Amount
+  transactions.value.total_amount = transactions.value.total_amount - t.originalAmount + t.Am
+  if (t.Ma) transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.originalAmount + t.Am
+  t.originalAmount = t.Am
 }
 
 function onMarkedChange(t, e) {
   if (e.target.checked) {
-     t.Marked = '1'
-     transactions.value.total_marked_amount = transactions.value.total_marked_amount + t.Amount
+     t.Ma = 1
+     transactions.value.total_marked_amount = transactions.value.total_marked_amount + t.Am
   } else {
-     t.Marked = '0'
-     transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Amount
+     t.Ma = 0
+     transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Am
   }
 }
 

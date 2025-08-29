@@ -89,7 +89,7 @@ def get_accounts_json(accounts, account_totals):
     return json.dumps(account_list)
 
 def get_account_transactions_json(accounts, transactions, account_totals, payments, account_id, next_id):
-    account_transactions = [tx for tx in transactions if tx['Account'] == accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['name']]
+    account_transactions = [tx for tx in transactions if tx['Acc'] == accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})['name']]
     account_totals_data = account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})
     payment_methods = [{'id': payment_id, 'name': payment_info['name']} for payment_id, payment_info in payments.items() if payment_info['account'] == account_id]
 
@@ -198,7 +198,7 @@ def extract_data(root):
             category = 'Transfer'
             idost = nb_to_idx.get(st)
             if (idost):
-                subcategory = transactions[idost]['Account']
+                subcategory = transactions[idost]['Acc']
                 transactions[idost]['Subcategory'] = account_info['name']
             else:
                 nb_to_idx[next_id] = idx
@@ -220,25 +220,25 @@ def extract_data(root):
                 parties[party_id]['last_note'] = transaction.get('No')
 
         transaction_data = {
-            'Account': account_info['name'],
+            'Acc': account_info['name'],
 #            'Bank': banks.get(account_info['bank'], 'Unknown'),
             'TxNb': next_id,
 #            'Transaction ID': transaction.get('Id'),
             'Date': transaction.get('Dt'),
 #            'Value Date': transaction.get('Dv'),
-            'Currency': currencies.get(transaction.get('Cu'), 'Unknown'),
-            'Amount': float(amount),
+            'Cur': currencies.get(transaction.get('Cu'), 'Unknown'),
+            'Am': float(amount),
 #            'Change between account and transaction': transaction.get('Exb'),
 #            'Exchange Rate': transaction.get('Exr'),
 #            'Exchange Fee': transaction.get('Exf'),
-            'Party': parties.get(party_id, { 'name': 'Unknown' })['name'],
-            'Category': category,
-            'Subcategory': subcategory,
+            'Pa': parties.get(party_id, { 'name': 'Unknown' })['name'],
+            'Cat': category,
+            'SCat': subcategory,
             'BR': transaction.get('Br'),
             'Note': transaction.get('No'),
             'PM': pm,
             'PMC': transaction.get('Pc'),
-            'Marked': marked,
+            'Ma': marked,
 #            'Archive Number': transaction.get('Ar'),
 #            'Automatic Transaction': transaction.get('Au'),
 #            'Reconcile Number': transaction.get('Re'),
