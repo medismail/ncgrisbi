@@ -199,7 +199,7 @@ def extract_data(root):
             idost = nb_to_idx.get(st)
             if (idost):
                 subcategory = transactions[idost]['Acc']
-                transactions[idost]['Subcategory'] = account_info['name']
+                transactions[idost]['SCat'] = account_info['name']
             else:
                 nb_to_idx[next_id] = idx
                 subcategory = ''

@@ -457,7 +457,7 @@ const addNewTransaction = () => {
     TxNb: transactions.value.next_id.toString(),
     Date: formatDate(),
     Am: 0,
-    Cur: transactions.currency.name,
+    Cur: transactions.value.currency.name,
     Pa: '',
     Cat: '',
     SCat: '',
