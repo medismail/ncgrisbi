@@ -16,7 +16,7 @@
   <website>https://github.com/medismail/ncgrisbi</website>
   <bugs>https://github.com/medismail/ncgrisbi/issues</bugs>
   <dependencies>
-    <nextcloud min-version="29" max-version="31"/>
+    <nextcloud min-version="29" max-version="33"/>
   </dependencies>
   <namespace>NCGrisbi</namespace>
   <category>tools</category>
