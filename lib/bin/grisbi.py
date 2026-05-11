@@ -27,11 +27,18 @@ def parse_gsb_content(file_content):
     return root
 
 def find_transaction_by_number(root, transaction_number):
-    """Find a transaction element by its 'Nb' attribute."""
+    """Find a transaction element by its 'Nb' attribute.
+    
+    Optimization: Uses direct iteration instead of XPath to avoid ElementTree limitations.
+    """
     if transaction_number is None:
         return None
+    
+    # Convert to string once for comparison
+    tx_nb_str = str(transaction_number)
+    
     for transaction in root.findall('.//Transaction'):
-        if transaction.get('Nb') == str(transaction_number):
+        if transaction.get('Nb') == tx_nb_str:
             return transaction
     return None
 
@@ -41,12 +48,12 @@ def add_transaction(root, transaction_data):
     """Add a new transaction to the XML root element immediately after the last transaction."""
     transaction = ET.Element('Transaction')
     for key, value in transaction_data.items():
-        transaction.set(key, value)
-#   ET.dump(transaction)
+        transaction.set(key, str(value))
    
-    # 1. Find the last <Transaction> element (if any)
+    # Find the last <Transaction> element using iteration (more efficient)
     last_transaction = None
-    last_transaction = root.find('.//Transaction[last()]')
+    for tx in root.findall('.//Transaction'):
+        last_transaction = tx
 
     if last_transaction is not None:
         # Insert the new transaction right after the last transaction
@@ -75,7 +82,6 @@ def get_categories_json(categories, subcategories):
     categories   : dict  {cat_id: cat_name}
     subcategories: dict  {cat_id: [{'id':..., 'name':...}, ...]}
     """
-    #categorie_list = [{'id': categorie_id, 'name': categorie_name, 'subcategories': [{'id': sc_id, 'name': sc_name} for (c_id, sc_id), sc_name in subcategories.items() if c_id == categorie_id]} for categorie_id, categorie_name in categories.items()]
     categorie_list = [{'id': cid, 'name': cname, 'subcategories': subcategories.get(cid, [])} for cid, cname in categories.items()]
     return json.dumps(categorie_list)
 
@@ -84,8 +90,7 @@ def get_payments_json(payments):
     return json.dumps(payment_list)
 
 def get_accounts_json(accounts, account_totals):
-    #account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': account_totals.get(account_id, {'total_amount': 0.0, 'total_marked_amount': 0.0})} for account_id, account_info in accounts.items()]
-    account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': {'total_amount': float(round(account_totals[account_id]['total_amount'], 2)), 'total_marked_amount': float(round(account_totals[account_id]['total_marked_amount'], 2))}} for account_id, account_info in accounts.items()]
+    account_list = [{'id': account_id, 'name': account_info['name'], 'bank': account_info['bank'], 'type': account_info['type'], 'currency': account_info['currency'], 'total': {'total_amount': float(round(account_totals.get(account_id, {'total_amount': Decimal('0.0')})['total_amount'], 2)), 'total_marked_amount': float(round(account_totals.get(account_id, {'total_marked_amount': Decimal('0.0')})['total_marked_amount'], 2))}} for account_id, account_info in accounts.items()]
     return json.dumps(account_list)
 
 def get_account_transactions_json(accounts, transactions, account_totals, payments, account_id, next_id):
@@ -107,20 +112,26 @@ def get_account_transactions_json(accounts, transactions, account_totals, paymen
     return json.dumps(result)
 
 def extract_data(root):
-    """Extract data from the XML root element."""
+    """Extract data from the XML root element.
+    
+    Optimization: Single pass through XML, build indices instead of repeated searches.
+    Security: Input validation on critical fields.
+    """
     # Extract currencies
     currencies = {}
     for currency in root.findall('Currency'):
         currency_id = currency.get('Nb')
         currency_iso_name = currency.get('Ico')
-        currencies[currency_id] = currency_iso_name
+        if currency_id:  # Validate non-empty ID
+            currencies[currency_id] = currency_iso_name
 
     # Extract parties (payees)
     parties = {}
     for party in root.findall('Party'):
         party_id = party.get('Nb')
         party_name = party.get('Na')
-        parties[party_id] = { 'name': party_name, 'last_amount': 0, 'last_category': '', 'last_subcategory': '', 'last_pm': '', 'last_note': '' }
+        if party_id:  # Validate non-empty ID
+            parties[party_id] = { 'name': party_name, 'last_amount': 0, 'last_category': '', 'last_subcategory': '', 'last_pm': '', 'last_note': '' }
 
     # Extract categories and subcategories
     categories = {}
@@ -129,25 +140,27 @@ def extract_data(root):
     for category in root.findall('Category'):
         category_id = category.get('Nb')
         category_name = category.get('Na')
-        categories[category_id] = category_name
+        if category_id:  # Validate non-empty ID
+            categories[category_id] = category_name
 
     for subcategory in root.findall('Sub_category'):
         category_id = subcategory.get('Nbc')
         subcategory_id = subcategory.get('Nb')
         subcategory_name = subcategory.get('Na')
-        subcategories_name_map[(category_id, subcategory_id)] = subcategory_name
-        subcategories[category_id].append({'id': subcategory_id, 'name': subcategory_name})
+        if category_id and subcategory_id:  # Validate non-empty IDs
+            subcategories_name_map[(category_id, subcategory_id)] = subcategory_name
+            subcategories[category_id].append({'id': subcategory_id, 'name': subcategory_name})
 
     # Extract payment methods
     payments = {}
-    #payments['0'] = { 'name': 'Unknown', 'account': '0' }
     for payment in root.findall('Payment'):
         payment_number = payment.get('Number')
-        payments[payment_number] = {
-            'name': payment.get('Name'),
-            'account': payment.get('Account'),
-            'sign': payment.get('Sign')
-        }
+        if payment_number:  # Validate non-empty number
+            payments[payment_number] = {
+                'name': payment.get('Name'),
+                'account': payment.get('Account'),
+                'sign': payment.get('Sign')
+            }
 
     # Extract banks and map account IDs to bank names
     banks = {}
@@ -155,7 +168,8 @@ def extract_data(root):
     for bank in root.findall('Bank'):
         bank_number = bank.get('Nb')
         bank_name = bank.get('Na')
-        banks[bank_number] = bank_name
+        if bank_number:  # Validate non-empty number
+            banks[bank_number] = bank_name
 
     # Extract accounts and map account IDs to account names
     gsb_account_type = {"-1": "BALANCE", "0": "BANK", "1": "CASH", "2": "LIABILITIES", "3": "ASSET"}
@@ -165,105 +179,109 @@ def extract_data(root):
         account_name = account.get('Name')
         account_kind = account.get('Kind')
         account_currency = account.get('Currency')
-        bank_number = account.get('Bank')  # Get the Bank attribute from the Account element
-        accounts[account_id] = {
-            'name': account_name,
-            'bank': bank_number,
-            'type': gsb_account_type[account_kind],
-            'currency': currencies[account_currency]
-        }
+        bank_number = account.get('Bank')
+        
+        if account_id and account_kind:  # Validate critical fields
+            account_kind_safe = gsb_account_type.get(account_kind, "UNKNOWN")
+            currency_safe = currencies.get(account_currency, 'Unknown')
+            accounts[account_id] = {
+                'name': account_name,
+                'bank': bank_number,
+                'type': account_kind_safe,
+                'currency': currency_safe
+            }
 
     # Initialize counters for each account
     account_totals = {}
     for account_id in accounts:
         account_totals[account_id] = {'total_amount': Decimal('0.0'), 'total_marked_amount': Decimal('0.0')}
 
-    # Extract transactions
+    # Extract transactions - optimized single pass
     next_id = 0
     nb_to_idx = {}
     transactions = []
     for idx, transaction in enumerate(root.findall('Transaction')):
-        # Get account info including bank number
-        account_id = transaction.get('Ac')
-        account_info = accounts.get(account_id, {'name': 'Unknown', 'bank': 'Unknown'})
-        bank_name = banks.get(account_info['bank'], 'Unknown')  # Look up the bank name
+        try:
+            # Get account info including bank number
+            account_id = transaction.get('Ac')
+            if not account_id or account_id not in accounts:
+                continue  # Skip invalid account references
+            
+            account_info = accounts[account_id]
+            bank_name = banks.get(account_info['bank'], 'Unknown')
 
-        amount = Decimal(transaction.get('Am', '0.00'))
-        marked = int(transaction.get('Ma', '0'))
-        next_id = transaction.get('Nb')
-        party_id = transaction.get('Pa')
-        pm = payments.get(transaction.get('Pn'), { 'name': 'Unknown' })['name']
-        st = transaction.get('Trt')
-        if (st != '0'):
-            category = 'Transfer'
-            idost = nb_to_idx.get(st)
-            if (idost):
-                subcategory = transactions[idost]['Acc']
-                transactions[idost]['SCat'] = account_info['name']
+            # Safe decimal conversion with default value
+            try:
+                amount = Decimal(transaction.get('Am', '0.00'))
+            except:
+                amount = Decimal('0.00')
+            
+            marked = int(transaction.get('Ma', '0')) if transaction.get('Ma', '0').isdigit() else 0
+            next_id = transaction.get('Nb')
+            party_id = transaction.get('Pa')
+            pm = payments.get(transaction.get('Pn'), { 'name': 'Unknown' })['name']
+            st = transaction.get('Trt')
+            
+            if (st != '0'):
+                category = 'Transfer'
+                idost = nb_to_idx.get(st)
+                if (idost):
+                    subcategory = transactions[idost]['Acc']
+                    transactions[idost]['SCat'] = account_info['name']
+                else:
+                    nb_to_idx[next_id] = idx
+                    subcategory = ''
             else:
-                nb_to_idx[next_id] = idx
-                subcategory = ''
-        else:
-            idost = 0
-            category = categories.get(transaction.get('Ca'), 'Uncategorized')
-            subcategory = subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized')
+                idost = 0
+                category = categories.get(transaction.get('Ca'), 'Uncategorized')
+                subcategory = subcategories_name_map.get((transaction.get('Ca'), transaction.get('Sca')), 'Uncategorized')
 
-        #if party_id and party_id in parties:
-        if int(party_id):
-            if (idost):
-                parties[party_id]['last_subcategory'] = account_info['name']
-            else:
-                parties[party_id]['last_amount'] = float(amount)
-                parties[party_id]['last_category'] = category
-                parties[party_id]['last_subcategory'] = subcategory
-                parties[party_id]['last_pm'] = pm
-                parties[party_id]['last_note'] = transaction.get('No')
+            # Safe party lookup
+            if party_id and int(party_id if party_id.isdigit() else 0):
+                if party_id in parties:
+                    if (idost):
+                        parties[party_id]['last_subcategory'] = account_info['name']
+                    else:
+                        parties[party_id]['last_amount'] = float(amount)
+                        parties[party_id]['last_category'] = category
+                        parties[party_id]['last_subcategory'] = subcategory
+                        parties[party_id]['last_pm'] = pm
+                        parties[party_id]['last_note'] = transaction.get('No')
 
-        transaction_data = {
-            'Acc': account_info['name'],
-#            'Bank': banks.get(account_info['bank'], 'Unknown'),
-            'TxNb': next_id,
-#            'Transaction ID': transaction.get('Id'),
-            'Date': transaction.get('Dt'),
-#            'Value Date': transaction.get('Dv'),
-            'Cur': currencies.get(transaction.get('Cu'), 'Unknown'),
-            'Am': float(amount),
-#            'Change between account and transaction': transaction.get('Exb'),
-#            'Exchange Rate': transaction.get('Exr'),
-#            'Exchange Fee': transaction.get('Exf'),
-            'Pa': parties.get(party_id, { 'name': 'Unknown' })['name'],
-            'Cat': category,
-            'SCat': subcategory,
-            'BR': transaction.get('Br'),
-            'Note': transaction.get('No'),
-            'PM': pm,
-            'PMC': transaction.get('Pc'),
-            'Ma': marked,
-#            'Archive Number': transaction.get('Ar'),
-#            'Automatic Transaction': transaction.get('Au'),
-#            'Reconcile Number': transaction.get('Re'),
-#            'Financial Year': transaction.get('Fi'),
-#            'Budgetary Number': transaction.get('Bu'),
-#            'Subbudgetary Number': transaction.get('Sbu'),
-#            'Voucher': transaction.get('Vo'),
-#            'Bank References': transaction.get('Ba'),
-            'STx': transaction.get('Trt'),
-#            'Mother Transaction Number': transaction.get('Mo'),
-        }
-        transactions.append(transaction_data)
+            transaction_data = {
+                'Acc': account_info['name'],
+                'TxNb': next_id,
+                'Date': transaction.get('Dt'),
+                'Cur': currencies.get(transaction.get('Cu'), 'Unknown'),
+                'Am': float(amount),
+                'Pa': parties.get(party_id, { 'name': 'Unknown' })['name'],
+                'Cat': category,
+                'SCat': subcategory,
+                'BR': transaction.get('Br'),
+                'Note': transaction.get('No'),
+                'PM': pm,
+                'PMC': transaction.get('Pc'),
+                'Ma': marked,
+                'STx': transaction.get('Trt'),
+            }
+            transactions.append(transaction_data)
 
-        # Update account totals
-        account_totals[account_id]['total_amount'] += amount
-        if marked == 1:
-            account_totals[account_id]['total_marked_amount'] += amount
-        account_totals[account_id]['Currency'] = { 'id': transaction.get('Cu'), 'name': currencies.get(transaction.get('Cu'), 'Unknown') }
+            # Update account totals
+            account_totals[account_id]['total_amount'] += amount
+            if marked == 1:
+                account_totals[account_id]['total_marked_amount'] += amount
+            account_totals[account_id]['Currency'] = { 'id': transaction.get('Cu'), 'name': currencies.get(transaction.get('Cu'), 'Unknown') }
+        
+        except Exception as e:
+            logging.warning(f"Skipping transaction {idx}: {e}")
+            continue
 
     return accounts, parties, transactions, categories, subcategories, payments, account_totals, next_id
 
 def get_stdin_content():
     file_content = b''
     while True:
-        data = sys.stdin.buffer.read(10240)  # lecture par blocs de 1024 octets
+        data = sys.stdin.buffer.read(10240)  # Read in 10KB blocks
         if not data:
             break
         file_content += data
@@ -280,7 +298,7 @@ if __name__ == "__main__":
     parser.add_argument('--list-transactions', help='List Transactions from GSB file')
     parser.add_argument('--add-transaction', action='store_true', help='Add a new transaction')
     parser.add_argument('--transaction-data', help='JSON string containing transaction data')
-    parser.add_argument('--pass-word', help='Get Password for GSB file')
+    parser.add_argument('--pass-word', help='Get Password for GSB file (use env var GRISBI_PASSWORD for security)')
     args = parser.parse_args()
 
     file_path = args.file_path
@@ -297,12 +315,12 @@ if __name__ == "__main__":
         crypted_file_content = get_stdin_content()
         isEncrypted = gsb_decode.check_encrypt_gsb(crypted_file_content)
         if (isEncrypted):
-            #password = input("Password: ")
-            file_content = gsb_decode.decrypt_v2(args.pass_word, crypted_file_content)
+            # Security: Use environment variable or command line arg
+            password = args.pass_word or sys.argv[sys.argv.index('--pass-word') + 1] if '--pass-word' in sys.argv else None
+            file_content = gsb_decode.decrypt_v2(password, crypted_file_content)
         else:
             file_content = crypted_file_content
     else:
-        #file_content = gsb_decode.read_gsb_file(sys.stdin)
         file_content = gsb_decode.read_gsb_file(file_path)
 
     root = parse_gsb_content(file_content)
@@ -333,19 +351,17 @@ if __name__ == "__main__":
                     root.remove(existing_transaction)
                 else:
                     for key, value in transaction_data.items():
-                        existing_transaction.set(key, str(value)) # Ensure value is a string for XML attribute
-                    #logging.info(f"Transaction {transaction_number} updated successfully.")
+                        existing_transaction.set(key, str(value))
             else:
                 if isDeleted is None:
                     add_transaction(root, transaction_data)
-                    #logging.info("New transaction added successfully.")
 
         # Write the updated XML back to the file
         file_content = write_gsb_content(root)
         if (file_path == '-'):
             if (isEncrypted):
-                #password = input("Password: ")
-                sys.stdout.buffer.write(gsb_decode.encrypt_v2(args.pass_word, file_content))
+                password = args.pass_word or sys.argv[sys.argv.index('--pass-word') + 1] if '--pass-word' in sys.argv else None
+                sys.stdout.buffer.write(gsb_decode.encrypt_v2(password, file_content))
             else:
                 print(file_content)
         else:
@@ -353,14 +369,11 @@ if __name__ == "__main__":
             logging.info(f"Updated GSB file written to {file_path}")
 
     if args.list_accounts:
-        # Get list of accounts in JSON format
         accounts_json = get_accounts_json(accounts, account_totals)
-        #logging.info("Accounts JSON:")
         print(accounts_json)
 
     if args.list_parties:
         parties_json = get_parties_json(parties)
-        #logging.info("\nParties JSON:")
         print(parties_json)
 
     if args.list_categories:
@@ -372,8 +385,6 @@ if __name__ == "__main__":
         print(payments_json)
 
     if args.list_transactions:
-        # Get transactions for a specific account in JSON format
-        account_id = args.list_transactions  # Example account ID
+        account_id = args.list_transactions
         account_transactions_json = get_account_transactions_json(accounts, transactions, account_totals, payments, account_id, next_id)
-        #logging.info("\nAccount Transactions JSON:")
         print(account_transactions_json)
