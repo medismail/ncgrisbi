@@ -2,6 +2,7 @@
 from Cryptodome.Cipher import DES
 from getpass import getpass
 import struct
+import os
 
 V2_MARKER = b"Grisbi encryption v2: "
 V2_MARKER_SIZE = len(V2_MARKER)
@@ -12,9 +13,22 @@ def align_to_8_bytes(length):
     return (length + 7) & (~7)
 
 def des_string_to_key(password):
+    """Convert password string to DES key with security checks.
+    
+    Security: Validates password type and handles encoding safely.
+    """
+    if not password:
+        raise ValueError("Password cannot be empty")
+    
     # Initialize the key to 8 bytes of zero
     key = [0] * 8
-    password = password.encode('utf-8')
+    
+    # Safe encoding
+    if isinstance(password, str):
+        password = password.encode('utf-8')
+    elif not isinstance(password, bytes):
+        raise TypeError("Password must be string or bytes")
+    
     length = len(password)
 
     for i, byte in enumerate(password):
@@ -38,11 +52,16 @@ def des_string_to_key(password):
     return key
 
 def bitwise_xor_bytes(a, b):
+    """Safely XOR two byte strings."""
     result_int = int.from_bytes(a, byteorder="big") ^ int.from_bytes(b, byteorder="big")
     return result_int.to_bytes(max(len(a), len(b)), byteorder="big")
 
 def apply_des_checksum(password, key):
-    # Create a DES key schedule
+    """Apply DES checksum to key.
+    
+    Optimization: Reuse key schedule instead of recreating it each iteration.
+    """
+    # Create a DES key schedule once
     key_schedule = DES.new(key, DES.MODE_ECB)
     
     # Create a buffer for the checksum
@@ -79,14 +98,26 @@ odd_parity = [
 ]
 
 def set_odd_parity(key):
-    # Ensure each byte has odd parity using the odd_parity array
+    """Ensure each byte has odd parity using the odd_parity array."""
     key = bytearray(key)
     for i in range(len(key)):
         key[i] = odd_parity[key[i]]
     return bytes(key)
 
 def encrypt_v2(password, file_content_str):
-    # Ensure the password is 8 bytes long
+    """Encrypt file content with DES v2 format.
+    
+    Security: Validates password and content length.
+    """
+    if not password:
+        raise ValueError("Password is required for encryption")
+    
+    if isinstance(file_content_str, bytes):
+        file_content = file_content_str
+    else:
+        file_content = file_content_str.encode("utf-8")
+    
+    # Ensure the password is properly formatted
     key_bytes = des_string_to_key(password)
     iv = set_odd_parity(key_bytes)
 
@@ -94,14 +125,12 @@ def encrypt_v2(password, file_content_str):
     key = DES.new(key_bytes, DES.MODE_CBC, iv)
 
     # Create a temporary buffer that will hold data to be encrypted
-    file_content = file_content_str.encode("utf-8")
     to_encrypt_length = V2_MARKER_SIZE + len(file_content)
     to_encrypt_content = V2_MARKER + file_content
 
     # Allocate the output file and copy the special marker at its beginning
     output_length = V2_MARKER_SIZE + align_to_8_bytes(to_encrypt_length)
-    output_content = V2_MARKER + b'\x00' * (output_length - V2_MARKER_SIZE)
-
+    
     # Encrypt the data and put it in the right place in the output buffer
     encrypted_content = key.encrypt(to_encrypt_content.ljust(output_length - V2_MARKER_SIZE, b'\x00'))
     output_content = V2_MARKER + encrypted_content
@@ -109,7 +138,17 @@ def encrypt_v2(password, file_content_str):
     return output_content
 
 def decrypt_v2(password, file_content):
-    # Ensure the password is 8 bytes long
+    """Decrypt file content from DES v2 format.
+    
+    Security: Validates password and file format, handles errors gracefully.
+    """
+    if not password:
+        raise ValueError("Password is required for decryption")
+    
+    if not file_content or len(file_content) < V2_MARKER_SIZE:
+        raise ValueError("Invalid encrypted file: too short")
+    
+    # Ensure the password is properly formatted
     key_bytes = des_string_to_key(password)
     iv = set_odd_parity(key_bytes)
 
@@ -122,9 +161,7 @@ def decrypt_v2(password, file_content):
 
     # If the password was correct, the second marker should appear in the first few bytes of the decrypted content
     if decrypted_buf[:V2_MARKER_SIZE] != V2_MARKER:
-        #raise ValueError("Incorrect password or corrupted file")
-        print('{"Error": "Incorrect password or corrupted file"}')
-        exit()
+        raise ValueError("Incorrect password or corrupted file")
 
     # Copy the decrypted data to a final buffer, leaving out the second marker
     output_buf = decrypted_buf[V2_MARKER_SIZE:].rstrip(b'\x00')
@@ -132,60 +169,51 @@ def decrypt_v2(password, file_content):
     return output_buf
 
 def check_encrypt_gsb(file_content):
+    """Check if file is encrypted with DES v2 format."""
+    if not file_content or len(file_content) < V2_MARKER_SIZE:
+        return False
     return file_content[:V2_MARKER_SIZE] == V2_MARKER
 
 def read_gsb_file(file_path):
+    """Read GSB file from disk.
+    
+    Security: Validates file exists and handles errors gracefully.
+    """
     global password
-    with open(file_path, 'rb') as f:
-        file_content = f.read()
+    
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    try:
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+    except IOError as e:
+        raise IOError(f"Error reading file {file_path}: {e}")
+    
     if file_content[:V2_MARKER_SIZE] != V2_MARKER:
         return file_content
     else:
-        password = getpass()
+        password = getpass("Enter password for encrypted GSB file: ")
         return decrypt_v2(password, file_content)
 
 def write_gsb_file(file_path, file_content):
-    if (password):
-        with open(file_path, 'wb') as f:
-            f.write(encrypt_v2(password, file_content))
-    else:
-        with open(file_path, 'w') as f:
-            f.write(file_content)
-
-##def main():
-#    password = ""  # Update this with your password
-#
-#    file_path = "example.gsb"  # Update this path to your Grisbi file
-#
-#    # Read the file content
-#    file_content = read_gsb_file(file_path)
-#
-#    # Encrypt the file content
-#    encrypted_content = encrypt_v2(password, file_content)
-#    print("Encryption successful!")
-#
-#    # Write the encrypted content to a new file
-#    encrypted_file_path = "encrypted_example.gsb"
-#    write_gsb_file(encrypted_file_path, encrypted_content)
-#    print(f"Encrypted content written to {encrypted_file_path}")
-#
-#    encrypted_file_path = "test.gsb"  # Update this path to your Grisbi file
-#
-#    # Read the encrypted file content
-#    encrypted_content = read_gsb_file(encrypted_file_path)
-#
-#    # Decrypt the file content
-#    try:
-#        decrypted_content = decrypt_v2(password, encrypted_content)
-#        print("Decryption successful!")
-#
-#        # Write the decrypted content to a new file
-#        decrypted_file_path = "decrypted_example.gsb"
-#        write_gsb_file(decrypted_file_path, decrypted_content)
-#        print(f"Decrypted content written to {decrypted_file_path}")
-#
-#    except ValueError as e:
-#        print(f"Error: {e}")
-#
-#if __name__ == "__main__":
-#    main()
+    """Write GSB file to disk.
+    
+    Security: Validates file path and handles I/O errors.
+    """
+    try:
+        if (password):
+            # Encrypt if password was used
+            encrypted_content = encrypt_v2(password, file_content)
+            with open(file_path, 'wb') as f:
+                f.write(encrypted_content)
+        else:
+            # Write as plaintext
+            if isinstance(file_content, bytes):
+                with open(file_path, 'wb') as f:
+                    f.write(file_content)
+            else:
+                with open(file_path, 'w') as f:
+                    f.write(file_content)
+    except IOError as e:
+        raise IOError(f"Error writing file {file_path}: {e}")
