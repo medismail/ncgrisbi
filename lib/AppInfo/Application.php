@@ -16,17 +16,6 @@ class Application extends App implements IBootstrap {
     public function __construct(array $params = []) {
         parent::__construct(self::APP_ID, $params);
 
-        if (array_key_exists("REQUEST_URI", \OC::$server->getRequest()->server))
-        {
-            $url = \OC::$server->getRequest()->server["REQUEST_URI"];
-            if (isset($url)) {
-                if (preg_match("%/apps/files(/.*)?%", $url) || str_contains($url, "/s/")) // Files app and file sharing
-                {
-                    Util::addScript(self::APP_ID, "viewer");
-                }
-            }
-        }
-
         $container = $this->getContainer();
 
         /**
