@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<Grisbi>
+	<General File_version="1.2.1" Grisbi_version="1.2.2" Crypt_file="0" Archive_file="0" />
+	<Currency Nb="1" Na="Euro" Co="€" Ico="EUR" Fl="2" />
+	<Account Name="Current account" Id="account-current" Number="1" Owner="Test user" Kind="0" Currency="1" Path_icon="(null)" Bank="1" />
+	<Account Name="Savings account" Id="account-savings" Number="2" Owner="Test user" Kind="0" Currency="1" Path_icon="(null)" Bank="1" />
+	<Payment Number="1" Name="Bank card" Sign="1" Show_entry="0" Automatic_number="0" Current_number="(null)" Account="1" />
+	<Payment Number="2" Name="Bank transfer" Sign="1" Show_entry="0" Automatic_number="0" Current_number="(null)" Account="2" />
+	<Transaction Ac="1" Nb="10" Id="import-10" Dt="07/01/2026" Dv="07/02/2026" Cu="1" Am="-42.50" Exb="0" Exr="0.00" Exf="0.00" Pa="1" Ca="1" Sca="1" Br="0" No="July invoice" Pn="1" Pc="(null)" Ma="3" Ar="0" Au="0" Re="7" Fi="2026" Bu="3" Sbu="1" Vo="receipt-10" Ba="statement-10" Trt="0" Mo="0" />
+	<Transaction Ac="1" Nb="11" Id="(null)" Dt="07/05/2026" Dv="(null)" Cu="1" Am="1000.00" Exb="0" Exr="0.00" Exf="0.00" Pa="2" Ca="2" Sca="1" Br="0" No="Salary" Pn="1" Pc="(null)" Ma="0" Ar="0" Au="0" Re="0" Fi="2026" Bu="0" Sbu="0" Vo="(null)" Ba="(null)" Trt="0" Mo="0" />
+	<Transaction Ac="2" Nb="12" Id="(null)" Dt="07/06/2026" Dv="(null)" Cu="1" Am="250.00" Exb="0" Exr="0.00" Exf="0.00" Pa="2" Ca="2" Sca="1" Br="0" No="Savings deposit" Pn="2" Pc="(null)" Ma="0" Ar="0" Au="0" Re="0" Fi="2026" Bu="0" Sbu="0" Vo="(null)" Ba="(null)" Trt="0" Mo="0" />
+	<Party Nb="1" Na="Electricity &amp; Water" Txt="Utility supplier" Search="(null)" IgnCase="0" UseRegex="0" />
+	<Party Nb="2" Na="Employer" Txt="(null)" Search="(null)" IgnCase="0" UseRegex="0" />
+	<Category Nb="1" Na="Housing" Kd="1" />
+	<Sub_category Nbc="1" Nb="1" Na="Electricity" />
+	<Category Nb="2" Na="Income" Kd="0" />
+	<Sub_category Nbc="2" Nb="1" Na="Salary" />
+	<Bank Nb="1" Na="Example Bank" Co="00001" BIC="EXAMPLE1" Adr="(null)" Tel="(null)" Mail="(null)" Web="(null)" Nac="(null)" Faxc="(null)" Telc="(null)" Mailc="(null)" Rem="(null)" />
+</Grisbi>
