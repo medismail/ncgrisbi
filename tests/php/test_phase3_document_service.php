@@ -1,6 +1,14 @@
 <?php
 declare(strict_types=1);
 
+namespace OCP {
+    interface IUser {
+        public function getUID();
+    }
+    interface IUserSession {
+        public function getUser();
+    }
+}
 namespace OCP\Files {
     class NotFoundException extends \RuntimeException {}
     interface File {
@@ -9,8 +17,6 @@ namespace OCP\Files {
         public function getId();
         public function getEtag();
         public function getSize($includeMounts = true);
-        public function lock($type);
-        public function unlock($type);
     }
     interface Folder {
         public function get($path);
@@ -22,16 +28,36 @@ namespace OCP\Files {
 namespace OCP\Lock {
     interface ILockingProvider {
         public const LOCK_EXCLUSIVE = 2;
+        public function acquireLock(
+            string $path,
+            int $type,
+            ?string $readablePath = null
+        ): void;
+        public function releaseLock(string $path, int $type): void;
     }
 }
 namespace Phase3Test {
     use OCP\Files\File;
     use OCP\Files\Folder;
     use OCP\Files\IRootFolder;
+    use OCP\IUser;
+    use OCP\IUserSession;
+    use OCP\Lock\ILockingProvider;
+
+    final class FakeUser implements IUser {
+        public function getUID() {
+            return 'user';
+        }
+    }
+
+    final class FakeUserSession implements IUserSession {
+        public function getUser() {
+            return new FakeUser();
+        }
+    }
 
     final class FakeFile implements File {
         public int $writes = 0;
-        public bool $locked = false;
 
         public function __construct(
             public string $content,
@@ -60,17 +86,6 @@ namespace Phase3Test {
         public function getSize($includeMounts = true) {
             return strlen($this->content);
         }
-
-        public function lock($type) {
-            if ($this->locked) {
-                throw new \RuntimeException('double lock');
-            }
-            $this->locked = true;
-        }
-
-        public function unlock($type) {
-            $this->locked = false;
-        }
     }
 
     final class FakeFolder implements Folder {
@@ -90,6 +105,30 @@ namespace Phase3Test {
             return $this->folder;
         }
     }
+
+    final class FakeLockingProvider implements ILockingProvider {
+        public bool $locked = false;
+        public ?string $lastKey = null;
+
+        public function acquireLock(
+            string $path,
+            int $type,
+            ?string $readablePath = null
+        ): void {
+            if ($this->locked) {
+                throw new \RuntimeException('double lock');
+            }
+            $this->locked = true;
+            $this->lastKey = $path;
+        }
+
+        public function releaseLock(string $path, int $type): void {
+            if ($path !== $this->lastKey) {
+                throw new \RuntimeException('wrong lock key');
+            }
+            $this->locked = false;
+        }
+    }
 }
 namespace {
     require __DIR__ . '/../../lib/Grisbi/ProtocolFrame.php';
@@ -104,7 +143,9 @@ namespace {
     use OCA\NCGrisbi\Service\GsbDocumentService;
     use Phase3Test\FakeFile;
     use Phase3Test\FakeFolder;
+    use Phase3Test\FakeLockingProvider;
     use Phase3Test\FakeRoot;
+    use Phase3Test\FakeUserSession;
 
     function check_service(bool $condition, string $message): void {
         if (!$condition) {
@@ -114,6 +155,7 @@ namespace {
     }
 
     $file = new FakeFile('GSB');
+    $locks = new FakeLockingProvider();
     $process = GrisbiProcess::createForTesting(
         'python3',
         __DIR__ . '/fake_protocol_worker.py',
@@ -121,8 +163,9 @@ namespace {
     );
     $service = new GsbDocumentService(
         new FakeRoot(new FakeFolder($file)),
-        'user',
-        $process
+        new FakeUserSession(),
+        $process,
+        $locks
     );
 
     $state = $service->getState('/Documents/test.gsb');
@@ -138,7 +181,11 @@ namespace {
     check_service($result['changed'] === true, 'mutation should be changed');
     check_service($file->content === 'GSB!', 'service did not write protocol output');
     check_service($file->writes === 1, 'service must perform exactly one write');
-    check_service($file->locked === false, 'service did not release the lock');
+    check_service($locks->locked === false, 'service did not release the lock');
+    check_service(
+        $locks->lastKey === 'ncgrisbi:document:42',
+        'service used the wrong application lock key'
+    );
     check_service($result['etag'] === 'etag-2', 'new etag was not returned');
 
     try {
@@ -156,7 +203,7 @@ namespace {
         );
     }
     check_service($file->writes === 1, 'conflict request wrote the file');
-    check_service($file->locked === false, 'conflict did not release the lock');
+    check_service($locks->locked === false, 'conflict did not release the lock');
 
     echo "phase3 document service tests passed\n";
 }
