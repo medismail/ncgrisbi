@@ -3,209 +3,264 @@ declare(strict_types=1);
 
 namespace OCA\NCGrisbi\Controller;
 
+use OCA\NCGrisbi\Exception\DocumentConflictException;
+use OCA\NCGrisbi\Exception\DocumentNotFoundException;
+use OCA\NCGrisbi\Exception\GrisbiProtocolException;
+use OCA\NCGrisbi\Grisbi\GrisbiProcess;
+use OCA\NCGrisbi\Service\GsbDocumentService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\IRequest;
-use OCP\Files\IRootFolder;
-use OCP\Files\FileInfo;
-use OCP\Files\Node;
-use OCP\Files\NotFoundException;
-use OCP\Files\InvalidPathException;
-use OCP\Files\NotPermittedException;
-use OCP\Appframework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
-use OCA\NCGrisbi\Tools\Helper;
-use OCA\NCGrisbi\Grisbi\GrisbiProcess;
-use OCA\NCGrisbi\Storage\StorageHandle;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\Files\File;
+use OCP\Files\Folder;
+use OCP\Files\IRootFolder;
+use OCP\Files\InvalidPathException;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
+use OCP\IRequest;
+use OCP\Lock\LockedException;
 
-class ApiController extends Controller {
-    private $userId;
-    private $userFolder;
+final class ApiController extends Controller {
+    private Folder $userFolder;
 
     public function __construct(
-        $appName,
+        string $appName,
         IRequest $request,
         IRootFolder $rootFolder,
-        string $userId
+        string $userId,
+        private GrisbiProcess $grisbiProcess,
+        private GsbDocumentService $documentService
     ) {
         parent::__construct($appName, $request);
-        $this->userId = $userId;
         $this->userFolder = $rootFolder->getUserFolder($userId);
     }
 
-    public function readFile(string $filePath): ?string {
-        try {
-            $file = $this->userFolder->get($filePath);
-            if ($file instanceof Node && !($file->getType() === FileInfo::TYPE_FOLDER)) {
-                return $file->getContent();
-            }
-        } catch (NotFoundException $e) {
-            return null;
-        }
-        return null;
-    }
-
-    /**
-     *
-     * @param string $userId L'ID de l'utilisateur.
-     * @param string $filePath Chemin du fichier (ex: "Documents/mon_fichier.txt").
-     * @param string $content Contenu à écrire dans le fichier.
-     * @param bool $overwrite Si `true`, écrase le fichier s'il existe déjà.
-     * @return bool `true` si l'écriture a réussi, `false` sinon.
-     * @throws \RuntimeException Si une erreur critique survient.
-     */
-    public function writeFile(string $filePath, string $content, bool $overwrite = false): bool
-    {
-        try {
-            $node = $this->userFolder->get($filePath);
-
-            if ($node->getType() === FileInfo::TYPE_FOLDER) {
-                throw new \RuntimeException("Le chemin '$filePath' est un dossier, pas un fichier.");
-            }
-
-            if (!$overwrite) {
-                throw new \RuntimeException("Le fichier '$filePath' existe déjà et l'option overwrite est désactivée.");
-            }
-
-            $node->putContent($content);
-            return true;
-
-        } catch (NotFoundException $e) {
-            $parentPath = dirname($filePath);
-            if ($parentPath !== '.') {
-                try {
-                    $parentFolder = $this->userFolder->newFolder($parentPath);
-                } catch (InvalidPathException $e) {
-                    throw new \RuntimeException("Chemin invalide pour le dossier parent : '$parentPath'.");
-                }
-            }
-
-            $file = $this->userFolder->newFile($filePath);
-            $file->putContent($content);
-            return true;
-
-        } catch (NotPermittedException $e) {
-            throw new \RuntimeException("Permission refusée pour écrire dans '$filePath'.");
-        } catch (\Exception $e) {
-            throw new \RuntimeException("Erreur lors de l'écriture du fichier '$filePath' : " . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * @param string $filePath
-     * @param string $filePassword
-     *
-     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
-    public function getParties(string $filePath, string $filePassword): JSONResponse {
-        //if (Helper::pythonInstalled()) {
-            $contents = $this->readFile($filePath);
-            $process = new GrisbiProcess();
-            $process->setPassword($filePassword);
-            $parties = json_decode($process->getParties($contents), true);
-            return new JSONResponse($parties);
-        //}
-        //return new JSONResponse([]); // Return an empty array if Python is not installed
+    public function getParties(string $filePath, string $filePassword = ''): JSONResponse {
+        return $this->legacyRead(
+            $filePath,
+            $filePassword,
+            fn(string $content): string => $this->grisbiProcess->getParties($content)
+        );
     }
 
-    /**
-     * @param string $filePath
-     * @param string $filePassword
-     *
-     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
-    public function getCategories(string $filePath, string $filePassword): JSONResponse {
-        //if (Helper::pythonInstalled()) {
-            $contents = $this->readFile($filePath);
-            $process = new GrisbiProcess();
-            $process->setPassword($filePassword);
-            $categories = json_decode($process->getCategories($contents), true);
-            return new JSONResponse($categories);
-        //}
-        //return new JSONResponse([]); // Return an empty array if Python is not installed
+    public function getCategories(string $filePath, string $filePassword = ''): JSONResponse {
+        return $this->legacyRead(
+            $filePath,
+            $filePassword,
+            fn(string $content): string => $this->grisbiProcess->getCategories($content)
+        );
     }
 
-    /**
-     * @param string $filePath
-     * @param string $filePassword
-     *
-     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
-    public function getAccounts(string $filePath, string $filePassword): JSONResponse {
-        //if (Helper::pythonInstalled()) {
-            /*$retval = null;
-            $data = null;
-            exec('python3 ' . __DIR__ . '/../bin/grisbi.py ' . '--list-accounts ' . __DIR__ . $filePath, $data, $retval);*/
-            //$real = __DIR__ . $filePath;
-            $contents = $this->readFile($filePath);
-            $process = new GrisbiProcess();
-            $process->setPassword($filePassword);
-            $accounts = json_decode($process->getAccounts($contents), true);
-            return new JSONResponse($accounts);
-        //}
-        //return new JSONResponse('');
+    public function getAccounts(string $filePath, string $filePassword = ''): JSONResponse {
+        return $this->legacyRead(
+            $filePath,
+            $filePassword,
+            fn(string $content): string => $this->grisbiProcess->getAccounts($content)
+        );
     }
 
-    /**
-     * @param int $accountId
-     * @param string $filePath
-     * @param string $filePassword
-     *
-     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
-    public function getTransactions(string $accountId, string $filePath, string $filePassword): JSONResponse {
-        //if (Helper::pythonInstalled()) {
-            $contents = $this->readFile($filePath);
-            $process = new GrisbiProcess();
-            $process->setPassword($filePassword);
-            $transactions = json_decode($process->getTransactions($accountId, $contents), true);
-            return new JSONResponse($transactions);
-        //}
-        //return new JSONResponse('');
+    public function getTransactions(
+        string $accountId,
+        string $filePath,
+        string $filePassword = ''
+    ): JSONResponse {
+        return $this->legacyRead(
+            $filePath,
+            $filePassword,
+            fn(string $content): string => $this->grisbiProcess->getTransactions(
+                $accountId,
+                $content
+            )
+        );
     }
 
-    /**
-     * @param string $filePath
-     *
-     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     public function checkEncrypted(string $filePath): JSONResponse {
-        //if (Helper::pythonInstalled()) {
-            $contents = $this->readFile($filePath);
-            $process = new GrisbiProcess();
-            $accounts = json_decode($process->checkGSBFile($contents), true);
-            return new JSONResponse($accounts);
-        //}
-        //return new JSONResponse('');
+        try {
+            $state = $this->documentService->getState($filePath);
+            return new JSONResponse([
+                'Encrypted' => $state['encrypted'] ? 'True' : 'False',
+                'Compressed' => $state['compressed'],
+                'etag' => $state['etag'],
+            ]);
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e);
+        }
     }
 
     /**
-     * @param string $filePath
-     * @param string $filePassword
-     * @param string $transactionDataJson
-     *
+     * Return the concurrency token and envelope metadata used by the mutation API.
      */
     #[NoAdminRequired]
-    #[NoCSRFRequired]
-    public function saveTransaction(string $filePath, string $filePassword, string $transactionDataJson): JSONResponse {
-        //if (Helper::pythonInstalled()) {
-            $contents = $this->readFile($filePath);
-            $process = new GrisbiProcess();
-            $process->setPassword($filePassword);
-            $output = $process->addTransactions($transactionDataJson, $contents);
-            try {
-                $success = $this->writeFile($filePath, $output, true);
-                return new JSONResponse(['success' => $success, 'output' => 'TBD']); // You might want to return a more structured response
-            } catch (\RuntimeException $e) {
-                return new JSONResponse(['success' => false, 'output' => $e->getMessage()]);
-            }
-        //}
-        //return new JSONResponse(['success' => false, 'message' => 'Python not installed']);
+    public function documentState(string $filePath): JSONResponse {
+        try {
+            return new JSONResponse([
+                'success' => true,
+                'document' => $this->documentService->getState($filePath),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    /**
+     * Apply one typed mutation batch with optimistic concurrency protection.
+     *
+     * This endpoint intentionally has no NoCSRFRequired attribute. Nextcloud's
+     * request token is mandatory for every state-changing request.
+     *
+     * @param list<array<string, mixed>> $operations
+     */
+    #[NoAdminRequired]
+    public function mutate(
+        string $filePath,
+        string $baseEtag,
+        array $operations,
+        string $filePassword = ''
+    ): JSONResponse {
+        try {
+            $result = $this->documentService->mutate(
+                $filePath,
+                $baseEtag,
+                $operations,
+                $filePassword !== '' ? $filePassword : null
+            );
+            return new JSONResponse([
+                'success' => true,
+                'document' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    /**
+     * The original endpoint accepted raw GSB attributes, had no client ETag and
+     * rewrote the full XML tree. It is disabled so an old client cannot bypass
+     * the Phase 2 validator and Phase 3 concurrency contract.
+     */
+    #[NoAdminRequired]
+    public function saveTransaction(
+        string $filePath,
+        string $filePassword,
+        string $transactionDataJson
+    ): JSONResponse {
+        return new JSONResponse([
+            'success' => false,
+            'code' => 'legacy-mutation-disabled',
+            'message' => 'Use /api/mutations with baseEtag and typed operations.',
+        ], 410);
+    }
+
+    /**
+     * @param callable(string): string $operation
+     */
+    private function legacyRead(
+        string $filePath,
+        string $filePassword,
+        callable $operation
+    ): JSONResponse {
+        try {
+            $content = $this->getFileContent($filePath);
+            $this->grisbiProcess->setPassword($filePassword);
+            $json = $operation($content);
+            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+            return new JSONResponse($decoded);
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    private function getFileContent(string $filePath): string {
+        $path = ltrim(trim($filePath), '/');
+        try {
+            $node = $this->userFolder->get($path);
+        } catch (NotFoundException $e) {
+            throw new DocumentNotFoundException(
+                'The requested GSB file does not exist.',
+                0,
+                $e
+            );
+        }
+        if (!$node instanceof File) {
+            throw new DocumentNotFoundException('The requested path is not a file.');
+        }
+        return $node->getContent();
+    }
+
+    private function errorResponse(\Throwable $error): JSONResponse {
+        if ($error instanceof DocumentConflictException) {
+            return new JSONResponse([
+                'success' => false,
+                'code' => 'etag-conflict',
+                'message' => $error->getMessage(),
+                'currentEtag' => $error->getCurrentEtag(),
+            ], 409);
+        }
+        if ($error instanceof DocumentNotFoundException) {
+            return new JSONResponse([
+                'success' => false,
+                'code' => 'document-not-found',
+                'message' => $error->getMessage(),
+            ], 404);
+        }
+        if ($error instanceof GrisbiProtocolException) {
+            $code = $error->getProtocolCode();
+            $status = match ($code) {
+                'mutation-conflict' => 409,
+                'record-not-found' => 404,
+                'invalid-protocol', 'internal-error' => 500,
+                default => 422,
+            };
+            return new JSONResponse([
+                'success' => false,
+                'code' => $code,
+                'message' => $error->getMessage(),
+                'details' => $error->getDetails(),
+            ], $status);
+        }
+        if ($error instanceof LockedException) {
+            return new JSONResponse([
+                'success' => false,
+                'code' => 'document-locked',
+                'message' => 'The GSB file is currently locked by another operation.',
+            ], 423);
+        }
+        if ($error instanceof NotPermittedException) {
+            return new JSONResponse([
+                'success' => false,
+                'code' => 'permission-denied',
+                'message' => 'The GSB file cannot be read or updated.',
+            ], 403);
+        }
+        if ($error instanceof InvalidPathException || $error instanceof \InvalidArgumentException) {
+            return new JSONResponse([
+                'success' => false,
+                'code' => 'invalid-request',
+                'message' => $error->getMessage(),
+            ], 400);
+        }
+        if ($error instanceof \JsonException) {
+            return new JSONResponse([
+                'success' => false,
+                'code' => 'invalid-python-response',
+                'message' => 'The Grisbi reader returned invalid JSON.',
+            ], 500);
+        }
+        return new JSONResponse([
+            'success' => false,
+            'code' => 'internal-error',
+            'message' => 'The GSB operation failed.',
+        ], 500);
     }
 }
