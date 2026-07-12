@@ -29,6 +29,11 @@ jobs:
           php-version: '8.1'
           coverage: none
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install Python test dependencies
         run: python -m pip install -r requirements-dev.txt
 
@@ -38,6 +43,14 @@ jobs:
       - name: Lint PHP sources and tests
         run: find lib appinfo tests/php -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Check Phase 5 JavaScript modules
+        run: |
+          node --check src/domain/transactionEditor.mjs
+          node --check src/services/gsbApi.js
+
+      - name: Test Phase 5 frontend mutation planning
+        run: node tests/frontend/test_phase5_editor.mjs
+
       - name: Test binary process protocol
         run: php tests/php/test_phase3_process.php
 
@@ -46,3 +59,6 @@ jobs:
 
       - name: Test Phase 3 source contract
         run: php tests/php/test_phase3_source_contract.php
+
+      - name: Test Phase 5 source contract
+        run: php tests/php/test_phase5_source_contract.php
