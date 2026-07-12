@@ -39,9 +39,6 @@ final class GrisbiProcess {
     /**
      * Compatibility entry point for the existing read-only API.
      *
-     * The password is transported through descriptor 3 by the wrapper and never
-     * appears in the operating-system command line or process environment.
-     *
      * @param list<string> $parameters
      */
     public function run(
@@ -70,43 +67,10 @@ final class GrisbiProcess {
      * @return array{content: string, changed: bool, outcomes: array<int, mixed>, sha256: string}
      */
     public function mutate(array $operations, string $fileContent): array {
-        $requestId = bin2hex(random_bytes(16));
-        $request = [
-            'version' => ProtocolFrame::VERSION,
+        [$header, $payload, $sha256] = $this->requestProtocol([
             'command' => 'mutate',
-            'requestId' => $requestId,
             'operations' => $operations,
-        ];
-        $stdin = ProtocolFrame::encode($request, $fileContent);
-        $stdout = $this->runProcess(
-            [$this->pythonBinary, $this->protocolScriptPath],
-            $stdin,
-            $this->password
-        );
-        [$header, $payload] = ProtocolFrame::decode($stdout);
-
-        if (($header['version'] ?? null) !== ProtocolFrame::VERSION) {
-            throw new \RuntimeException('Python returned an unsupported protocol version.');
-        }
-        if (($header['requestId'] ?? null) !== $requestId) {
-            throw new \RuntimeException('Python returned a mismatched protocol request ID.');
-        }
-        if (($header['ok'] ?? false) !== true) {
-            $error = is_array($header['error'] ?? null) ? $header['error'] : [];
-            $code = is_string($error['code'] ?? null)
-                ? $error['code']
-                : 'protocol-error';
-            $message = is_string($error['message'] ?? null)
-                ? $error['message']
-                : 'The Grisbi mutation process rejected the request.';
-            throw new GrisbiProtocolException($code, $message, $error);
-        }
-
-        $expectedHash = $header['sha256'] ?? null;
-        $actualHash = hash('sha256', $payload);
-        if (!is_string($expectedHash) || !hash_equals($expectedHash, $actualHash)) {
-            throw new \RuntimeException('Python response checksum verification failed.');
-        }
+        ], $fileContent);
 
         return [
             'content' => $payload,
@@ -114,8 +78,24 @@ final class GrisbiProcess {
             'outcomes' => is_array($header['outcomes'] ?? null)
                 ? $header['outcomes']
                 : [],
-            'sha256' => $actualHash,
+            'sha256' => $sha256,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function getAccountSnapshot(string $accountId, string $fileContent): array {
+        [$header, $payload] = $this->requestProtocol([
+            'command' => 'accountSnapshot',
+            'accountId' => $accountId,
+        ], $fileContent);
+        if (($header['contentType'] ?? null) !== 'application/json') {
+            throw new \RuntimeException('Python returned an unexpected snapshot content type.');
+        }
+        $snapshot = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($snapshot)) {
+            throw new \RuntimeException('Python returned an invalid account snapshot.');
+        }
+        return $snapshot;
     }
 
     public function checkGSBFile(string $fileContent): string {
@@ -138,9 +118,7 @@ final class GrisbiProcess {
         return $this->run(['--list-transactions', $accountId, '-'], $fileContent);
     }
 
-    /**
-     * @deprecated The raw transaction API is disabled by ApiController in Phase 3.
-     */
+    /** @deprecated The raw transaction API is disabled by ApiController. */
     public function addTransactions(string $transactionDataJson, string $fileContent): string {
         return $this->run(
             ['--add-transaction', '--transaction-data', $transactionDataJson, '-'],
@@ -149,8 +127,47 @@ final class GrisbiProcess {
     }
 
     /**
-     * @param list<string> $command
+     * @param array<string, mixed> $request
+     * @return array{0: array<string, mixed>, 1: string, 2: string}
      */
+    private function requestProtocol(array $request, string $fileContent): array {
+        $requestId = bin2hex(random_bytes(16));
+        $request['version'] = ProtocolFrame::VERSION;
+        $request['requestId'] = $requestId;
+        $stdin = ProtocolFrame::encode($request, $fileContent);
+        $stdout = $this->runProcess(
+            [$this->pythonBinary, $this->protocolScriptPath],
+            $stdin,
+            $this->password
+        );
+        [$header, $payload] = ProtocolFrame::decode($stdout);
+
+        if (($header['version'] ?? null) !== ProtocolFrame::VERSION) {
+            throw new \RuntimeException('Python returned an unsupported protocol version.');
+        }
+        if (($header['requestId'] ?? null) !== $requestId) {
+            throw new \RuntimeException('Python returned a mismatched protocol request ID.');
+        }
+        if (($header['ok'] ?? false) !== true) {
+            $error = is_array($header['error'] ?? null) ? $header['error'] : [];
+            $code = is_string($error['code'] ?? null)
+                ? $error['code']
+                : 'protocol-error';
+            $message = is_string($error['message'] ?? null)
+                ? $error['message']
+                : 'The Grisbi process rejected the request.';
+            throw new GrisbiProtocolException($code, $message, $error);
+        }
+
+        $expectedHash = $header['sha256'] ?? null;
+        $actualHash = hash('sha256', $payload);
+        if (!is_string($expectedHash) || !hash_equals($expectedHash, $actualHash)) {
+            throw new \RuntimeException('Python response checksum verification failed.');
+        }
+        return [$header, $payload, $actualHash];
+    }
+
+    /** @param list<string> $command */
     private function runProcess(
         array $command,
         string $stdin,
@@ -176,8 +193,6 @@ final class GrisbiProcess {
         }
 
         try {
-            // Write the small password pipe first. This avoids a deadlock when a
-            // worker reads descriptor 3 before consuming a large stdin payload.
             $this->writeAll($pipes[3], $password ?? '');
             fclose($pipes[3]);
             $this->writeAll($pipes[0], $stdin);
