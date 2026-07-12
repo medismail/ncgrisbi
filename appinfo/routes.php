@@ -17,7 +17,8 @@ return [
         ['name' => 'api#get_categories', 'url' => '/api/categories', 'verb' => 'POST'],
         ['name' => 'api#check_encrypted', 'url' => '/api/checkencrypted', 'verb' => 'GET'],
 
-        // Phase 3 concurrency-safe document API
+        // Typed editor snapshot and concurrency-safe mutation API
+        ['name' => 'editor#account', 'url' => '/api/editor/account/{accountId}', 'verb' => 'POST'],
         ['name' => 'api#document_state', 'url' => '/api/document', 'verb' => 'POST'],
         ['name' => 'api#mutate', 'url' => '/api/mutations', 'verb' => 'POST'],
 
