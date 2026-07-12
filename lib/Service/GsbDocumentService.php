@@ -51,6 +51,53 @@ final class GsbDocumentService {
     }
 
     /**
+     * @return array{document: array{fileId: int, etag: string}, snapshot: array<string, mixed>}
+     */
+    public function getAccountSnapshot(
+        string $filePath,
+        string $accountId,
+        ?string $password = null
+    ): array {
+        $file = $this->getFile($filePath);
+        $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
+        $locked = false;
+        try {
+            $this->lockingProvider->acquireLock(
+                $lockKey,
+                ILockingProvider::LOCK_SHARED
+            );
+            $locked = true;
+
+            $etag = (string)$file->getEtag();
+            $content = $file->getContent();
+            $this->grisbiProcess->setPassword($password ?? '');
+            $snapshot = $this->grisbiProcess->getAccountSnapshot(
+                $accountId,
+                $content
+            );
+
+            $afterReadEtag = (string)$file->getEtag();
+            if (!hash_equals($etag, $afterReadEtag)) {
+                throw new DocumentConflictException($afterReadEtag);
+            }
+            return [
+                'document' => [
+                    'fileId' => (int)$file->getId(),
+                    'etag' => $etag,
+                ],
+                'snapshot' => $snapshot,
+            ];
+        } finally {
+            if ($locked) {
+                $this->lockingProvider->releaseLock(
+                    $lockKey,
+                    ILockingProvider::LOCK_SHARED
+                );
+            }
+        }
+    }
+
+    /**
      * @param list<array<string, mixed>> $operations
      * @return array{fileId: int, etag: string, changed: bool, outcomes: array<int, mixed>, sha256: string}
      */
@@ -71,9 +118,6 @@ final class GsbDocumentService {
         $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
         $locked = false;
         try {
-            // This application-scoped lock serializes every NCGrisbi mutation
-            // without recursively locking the file before File::putContent(),
-            // which acquires Nextcloud's filesystem lock internally.
             $this->lockingProvider->acquireLock(
                 $lockKey,
                 ILockingProvider::LOCK_EXCLUSIVE
@@ -100,9 +144,6 @@ final class GsbDocumentService {
             }
 
             if ($bytesChanged) {
-                // Catch external writes that occurred while Python validated the
-                // batch. File::putContent() then performs one normal Nextcloud
-                // write, including its hooks and filesystem locking.
                 $beforeWriteEtag = (string)$file->getEtag();
                 if (!hash_equals($currentEtag, $beforeWriteEtag)) {
                     throw new DocumentConflictException($beforeWriteEtag);
