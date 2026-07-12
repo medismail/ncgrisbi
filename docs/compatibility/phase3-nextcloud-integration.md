@@ -46,18 +46,30 @@ partial-update preservation or optimistic concurrency.
 The service performs the mutation in this order:
 
 1. Resolve the file inside the authenticated user's folder.
-2. Acquire an exclusive Nextcloud file lock.
-3. Compare the locked file's current ETag with `baseEtag`.
+2. Acquire an exclusive NCGrisbi application lock keyed by file ID.
+3. Compare the current file ETag with `baseEtag`.
 4. Read the original bytes.
 5. Run and fully validate the complete typed mutation batch in Python.
-6. Recheck the ETag while the exclusive lock is still held.
-7. Perform one `File::putContent()` call only when output bytes changed.
-8. Return the refreshed ETag and release the lock in `finally`.
+6. Recheck the ETag while the NCGrisbi application lock is held.
+7. Perform one `File::putContent()` call only when output bytes changed;
+   Nextcloud acquires its normal filesystem lock and runs its write hooks.
+8. Return the refreshed ETag and release the application lock in `finally`.
 
 No file write occurs for malformed requests, invalid Grisbi data, wrong
-passwords, failed mutation batches, or stale ETags. This is application-level
-atomicity using Nextcloud's public file and locking APIs; the storage backend
-retains responsibility for the crash semantics of its single write operation.
+passwords, failed mutation batches, or an ETag that changed before the final
+check. The application lock serializes NCGrisbi writers, while `putContent()`
+preserves Nextcloud hooks, versions, encryption wrappers, and filesystem locks.
+
+Nextcloud's public `File` API does not expose a conditional compare-and-swap
+write, so a non-NCGrisbi writer changing the file in the very small interval
+between the final ETag check and `putContent()` cannot be excluded completely.
+The storage backend also retains responsibility for crash semantics of the
+single write operation.
+
+The service deliberately does not hold a manual `Node` file lock while calling
+`putContent()`: Nextcloud documents that an exclusive node lock blocks other
+operations on that file even in the same PHP process, while `putContent()` must
+acquire and manage its own filesystem lock.
 
 ## PHP/Python binary protocol
 
