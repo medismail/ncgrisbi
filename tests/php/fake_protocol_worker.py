@@ -41,6 +41,22 @@ if password != b's ecret' or b's ecret' in cmdline:
         },
     }
     output = b''
+elif header.get('command') == 'accountSnapshot':
+    output = json.dumps({
+        'account': {'id': header.get('accountId'), 'name': 'Test account'},
+        'parties': [],
+        'categories': [],
+        'paymentMethods': [],
+        'transactions': [],
+    }, separators=(',', ':')).encode()
+    response = {
+        'version': 1,
+        'ok': True,
+        'requestId': header.get('requestId'),
+        'changed': False,
+        'contentType': 'application/json',
+        'sha256': hashlib.sha256(output).hexdigest(),
+    }
 else:
     output = payload + b'!'
     response = {
