@@ -12,6 +12,7 @@ $root = dirname(__DIR__, 2);
 $controller = file_get_contents($root . '/lib/Controller/ApiController.php');
 $process = file_get_contents($root . '/lib/Grisbi/GrisbiProcess.php');
 $routes = file_get_contents($root . '/appinfo/routes.php');
+$service = file_get_contents($root . '/lib/Service/GsbDocumentService.php');
 
 contract_check(
     str_contains($routes, "'/api/mutations'"),
@@ -56,6 +57,18 @@ contract_check(
 contract_check(
     str_contains($process, "3 => ['pipe', 'r']"),
     'password descriptor is missing'
+);
+contract_check(
+    str_contains($service, 'acquireLock('),
+    'application mutation lock is missing'
+);
+contract_check(
+    !str_contains($service, '$file->lock('),
+    'service recursively locks the file before putContent'
+);
+contract_check(
+    str_contains($service, 'IUserSession'),
+    'service does not resolve the authenticated user through IUserSession'
 );
 
 echo "phase3 source contract tests passed\n";
