@@ -32,4 +32,8 @@ check($result['content'] === 'GSB!', 'protocol payload did not round trip');
 check($result['changed'] === true, 'changed flag was not returned');
 check($result['outcomes'][0]['recordId'] === '13', 'outcome was not returned');
 
-echo "phase3 php process tests passed\n";
+$snapshot = $process->getAccountSnapshot('1', 'GSB');
+check($snapshot['account']['id'] === '1', 'snapshot account ID was not returned');
+check($snapshot['account']['name'] === 'Test account', 'snapshot JSON was not decoded');
+
+echo "phase3/phase5 php process tests passed\n";
