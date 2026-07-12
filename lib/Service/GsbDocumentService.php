@@ -10,18 +10,27 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
+use OCP\IUserSession;
 use OCP\Lock\ILockingProvider;
 
 final class GsbDocumentService {
     private const ENCRYPTION_V2_MARKER = 'Grisbi encryption v2: ';
-    private Folder $userFolder;
+    private ?Folder $userFolder = null;
 
     public function __construct(
         IRootFolder $rootFolder,
-        string $userId,
-        private GrisbiProcess $grisbiProcess
+        IUserSession $userSession,
+        private GrisbiProcess $grisbiProcess,
+        private ILockingProvider $lockingProvider
     ) {
-        $this->userFolder = $rootFolder->getUserFolder($userId);
+        $user = $userSession->getUser();
+        if ($user !== null) {
+            $this->userFolder = $rootFolder->getUserFolder($user->getUID());
+        }
+    }
+
+    public function readContent(string $filePath): string {
+        return $this->getFile($filePath)->getContent();
     }
 
     /**
@@ -59,9 +68,16 @@ final class GsbDocumentService {
         }
 
         $file = $this->getFile($filePath);
+        $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
         $locked = false;
         try {
-            $file->lock(ILockingProvider::LOCK_EXCLUSIVE);
+            // This application-scoped lock serializes every NCGrisbi mutation
+            // without recursively locking the file before File::putContent(),
+            // which acquires Nextcloud's filesystem lock internally.
+            $this->lockingProvider->acquireLock(
+                $lockKey,
+                ILockingProvider::LOCK_EXCLUSIVE
+            );
             $locked = true;
 
             $currentEtag = (string)$file->getEtag();
@@ -82,12 +98,11 @@ final class GsbDocumentService {
                     'The Python changed flag does not match the returned bytes.'
                 );
             }
-            $changed = $bytesChanged;
 
-            if ($changed) {
-                // The Python engine has already validated the full batch. Recheck
-                // the ETag while the exclusive lock is held, then perform exactly
-                // one public Nextcloud write operation.
+            if ($bytesChanged) {
+                // Catch external writes that occurred while Python validated the
+                // batch. File::putContent() then performs one normal Nextcloud
+                // write, including its hooks and filesystem locking.
                 $beforeWriteEtag = (string)$file->getEtag();
                 if (!hash_equals($currentEtag, $beforeWriteEtag)) {
                     throw new DocumentConflictException($beforeWriteEtag);
@@ -98,23 +113,35 @@ final class GsbDocumentService {
             return [
                 'fileId' => (int)$file->getId(),
                 'etag' => (string)$file->getEtag(),
-                'changed' => $changed,
+                'changed' => $bytesChanged,
                 'outcomes' => $result['outcomes'],
                 'sha256' => $result['sha256'],
             ];
         } finally {
             if ($locked) {
-                $file->unlock(ILockingProvider::LOCK_EXCLUSIVE);
+                $this->lockingProvider->releaseLock(
+                    $lockKey,
+                    ILockingProvider::LOCK_EXCLUSIVE
+                );
             }
         }
     }
 
     private function getFile(string $filePath): File {
+        if ($this->userFolder === null) {
+            throw new DocumentNotFoundException(
+                'No authenticated user folder is available.'
+            );
+        }
         $path = $this->normalizePath($filePath);
         try {
             $node = $this->userFolder->get($path);
         } catch (NotFoundException $e) {
-            throw new DocumentNotFoundException('The requested GSB file does not exist.', 0, $e);
+            throw new DocumentNotFoundException(
+                'The requested GSB file does not exist.',
+                0,
+                $e
+            );
         }
         if (!$node instanceof File) {
             throw new DocumentNotFoundException('The requested path is not a file.');
@@ -129,7 +156,9 @@ final class GsbDocumentService {
         }
         foreach (explode('/', $path) as $segment) {
             if ($segment === '' || $segment === '.' || $segment === '..') {
-                throw new \InvalidArgumentException('filePath contains an invalid segment.');
+                throw new \InvalidArgumentException(
+                    'filePath contains an invalid segment.'
+                );
             }
         }
         return $path;
@@ -148,7 +177,10 @@ final class GsbDocumentService {
         }
         return [
             'compressed' => $compressed,
-            'encrypted' => str_starts_with($payload, self::ENCRYPTION_V2_MARKER),
+            'encrypted' => str_starts_with(
+                $payload,
+                self::ENCRYPTION_V2_MARKER
+            ),
         ];
     }
 }
