@@ -12,28 +12,19 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
-use OCP\Files\File;
-use OCP\Files\Folder;
-use OCP\Files\IRootFolder;
 use OCP\Files\InvalidPathException;
-use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\IRequest;
 use OCP\Lock\LockedException;
 
 final class ApiController extends Controller {
-    private Folder $userFolder;
-
     public function __construct(
         string $appName,
         IRequest $request,
-        IRootFolder $rootFolder,
-        string $userId,
         private GrisbiProcess $grisbiProcess,
         private GsbDocumentService $documentService
     ) {
         parent::__construct($appName, $request);
-        $this->userFolder = $rootFolder->getUserFolder($userId);
     }
 
     #[NoAdminRequired]
@@ -182,20 +173,7 @@ final class ApiController extends Controller {
     }
 
     private function getFileContent(string $filePath): string {
-        $path = ltrim(trim($filePath), '/');
-        try {
-            $node = $this->userFolder->get($path);
-        } catch (NotFoundException $e) {
-            throw new DocumentNotFoundException(
-                'The requested GSB file does not exist.',
-                0,
-                $e
-            );
-        }
-        if (!$node instanceof File) {
-            throw new DocumentNotFoundException('The requested path is not a file.');
-        }
-        return $node->getContent();
+        return $this->documentService->readContent($filePath);
     }
 
     private function errorResponse(\Throwable $error): JSONResponse {
