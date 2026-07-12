@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from ncgrisbi.protocol import main
+from ncgrisbi.phase4_protocol import main
 
 
 if __name__ == "__main__":
