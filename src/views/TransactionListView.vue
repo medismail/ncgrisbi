@@ -1,710 +1,344 @@
 <template>
   <NcAppContent>
-    <template v-if="loading">
+    <div v-if="loading" class="loading">
       <NcLoadingIcon :size="32" />
-      <p>Loading Transactions...</p>
-    </template>
-    <template v-else>
-      <h2>Account Information</h2>
-      <ul>
-        <li>
-          <strong>Account Name:</strong> {{ transactions.account_name }}
-        </li>
-        <li>
-          <strong>Account ID:</strong> {{ transactions.account_id }}
-        </li>
-      </ul>
-      <h3>Totals:</h3>
-      <ul>
-        <li>
-          <strong>Total Amount:</strong> {{ formatCurrency(transactions.total_amount, transactions.currency.name, languageCode).formatted }}
-        </li>
-        <li>
-          <strong>Total Marked Amount:</strong> {{ formatCurrency(transactions.total_marked_amount, transactions.currency.name, languageCode).formatted }}
-        </li>
-      </ul>
-      <h3>Transactions:</h3>
-      <button @click="addNewTransaction">
-        Add Transaction
-      </button>
-      <button @click="saveTransactions">
-        Save Transactions
-      </button>
-      <button @click="fetchTransactions">
-        Cancel changes
-      </button>
-      <!-- scroll container -->
-      <div class="grid-scroll">
-        <div class="transaction-wrapper">
-          <div class="grid-row header">
-            <span class="col-n">#</span>
-            <span class="col-date">Date</span>
-            <span class="col-amount">Amount</span>
-            <span class="col-party">Party</span>
-            <span class="col-cat">Category (SubCategory)</span>
-            <span class="col-pm">Payment Method</span>
-            <span class="col-note">Note</span>
-            <span class="col-mark">Marked</span>
-            <span class="col-bref">Bank Ref.</span>
-            <span class="col-split">Split</span>
-            <span class="col-actions">Actions</span>
-          </div>
-          <DynamicScroller
-            class="scroller"
-            :items="reversedTransactions"
-            :min-item-size="48"
-            key-field="TxNb"
-          >
-            <template #default="{ item: t, index, active }">
-              <DynamicScrollerItem
-                tag="div"
-                class="grid-row body checkbox-wrapper-13"
-                :class="{ 'bright-row': !t.isEditing }"
-                :item="t"
-                :active="active"
-                :data-index="index"
-              >
-                <span class="col-n">{{ t['TxNb'] }}</span>
-                <span class="col-date"><input
-                  v-model="t.Date"
-                  :disabled="!t.isEditing"
-                ></span>
-                <span class="col-amount"><input
-                  v-model="t.Am"
-                  type="number"
-                  :disabled="!t.isEditing"
-                  @input="() => onAmountChange(t)"
-                ></span>
-                <span class="col-party"><input
-                                          v-model="t.Pa"
-                                          :list="'P-'+index"
-                                          :disabled="!t.isEditing"
-                                          @input="() => onPartyChange(t)"
-                                        >
-                  <datalist :id="'P-'+index">
-                    <option
-                      v-for="party in parties"
-                      :key="party.id"
-                      :value="party.name"
-                    > {{ party.name }}
-                    </option>
-                  </datalist>
-                </span>
-                <span class="col-cat">
-                  <input
-                    v-model="t.Cat"
-                    :list="'C-'+index"
-                    :disabled="!t.isEditing"
-                    @input="t.SCat=''"
-                  >
-                  <datalist :id="'C-'+index">
-                    <option
-                      v-for="c in categories"
-                      :key="c.id"
-                      :value="c.name"
-                    > {{ c.name }}
-                    </option>
-                  </datalist>
-                  (<input
-                    v-model="t.SCat"
-                    :list="'S-'+index"
-                    :disabled="!t.isEditing"
-                  >)
-                  <datalist :id="'S-'+index">
-                    <option
-                      v-for="s in subCategories(t)"
-                      :key="s.id"
-                      :value="s.name"
-                    > {{ s.name }}
-                    </option>
-                  </datalist>
-                </span>
-                <span class="col-pm"><input
-                                       v-model="t.PM"
-                                       :list="'PM-'+index"
-                                       :disabled="!t.isEditing"
-                                     >
-                  <datalist :id="'PM-'+index">
-                    <option
-                      v-for=" payment_method in transactions.payment_methods"
-                      :key="payment_method.id"
-                      :value="payment_method.name"
-                    > {{ payment_method.name }}
-                    </option>
-                  </datalist>
-                </span>
-                <span class="col-note"><input
-                  v-model="t.Note"
-                  :value="convertNullStringToEmpty(t.Note)"
-                  :disabled="!t.isEditing"
-                ></span>
-                <span class="col-mark"><input
-                  type="checkbox"
-                  :checked="t.Ma===1"
-                  :disabled="!t.isEditing"
-                  @change="onMarkedChange(t, $event)"
-                ></span>
-                <span class="col-bref"><input
-                  v-model="t.BR"
-                  :disabled="!t.isEditing"
-                ></span>
-                <span class="col-split"><input
-                  v-model="t.STx"
-                  :disabled="!t.isEditing"
-                ></span>
-                <span class="col-actions">
-                  <button
-                    v-if="!t.isEditing"
-                    @click="editTransaction(t)"
-                  >Edit</button>
-                  <button
-                    v-else
-                    @click="deleteTransaction(t.TxNb, t.STx)"
-                  >Delete</button>
-                </span>
-              </DynamicScrollerItem>
-            </template>
-          </DynamicScroller>
-        </div>
+      <p>Loading transactions…</p>
+    </div>
+
+    <div v-else-if="snapshot" class="editor">
+      <div v-if="message" class="message" :class="messageType">
+        {{ message }}
+        <button v-if="conflict" type="button" @click="reloadAfterConflict">
+          Reload current file
+        </button>
       </div>
-    </template>
+
+      <header class="account-header">
+        <div>
+          <h2>{{ snapshot.account.name }}</h2>
+          <p>Account {{ snapshot.account.id }} · ETag {{ etag }}</p>
+        </div>
+        <div class="totals">
+          <strong>{{ totals.totalAmount }} {{ snapshot.account.currency.code }}</strong>
+          <span>Marked: {{ totals.totalMarkedAmount }} {{ snapshot.account.currency.code }}</span>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <button type="button" :disabled="saving || conflict" @click="addTransaction">
+          Add transaction
+        </button>
+        <button
+          type="button"
+          :disabled="saving || conflict || !pendingChanges"
+          @click="saveChanges"
+        >
+          {{ saving ? 'Saving…' : 'Save changes' }}
+        </button>
+        <button type="button" :disabled="saving" @click="reloadSnapshot">
+          Discard and reload
+        </button>
+      </div>
+
+      <datalist id="phase5-parties">
+        <option v-for="party in snapshot.parties" :key="party.id" :value="party.name" />
+      </datalist>
+      <datalist id="phase5-categories">
+        <option v-for="category in snapshot.categories" :key="category.id" :value="category.name" />
+      </datalist>
+      <datalist id="phase5-payments">
+        <option v-for="payment in snapshot.paymentMethods" :key="payment.id" :value="payment.name" />
+      </datalist>
+
+      <div class="table-scroll">
+        <table class="transactions-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date</th>
+              <th>Amount</th>
+              <th>Party</th>
+              <th>Category</th>
+              <th>Subcategory</th>
+              <th>Payment</th>
+              <th>Note</th>
+              <th>Marked</th>
+              <th>Bank reference</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in displayedRows"
+              :key="row.key"
+              :class="{ deleted: row.deleted, protected: row.protected }"
+            >
+              <td>{{ row.transactionId || 'new' }}</td>
+              <td><input v-model="row.date" :disabled="!isEditable(row)" size="10"></td>
+              <td><input v-model="row.amount" :disabled="!isEditable(row)" type="number" step="any"></td>
+              <td>
+                <input v-model="row.partyName" :disabled="!isEditable(row)" list="phase5-parties">
+              </td>
+              <td>
+                <input
+                  v-model="row.categoryName"
+                  :disabled="!isEditable(row)"
+                  list="phase5-categories"
+                  @input="row.subcategoryName = ''"
+                >
+              </td>
+              <td>
+                <input
+                  v-model="row.subcategoryName"
+                  :disabled="!isEditable(row)"
+                  :list="`phase5-subcategories-${row.key}`"
+                >
+                <datalist :id="`phase5-subcategories-${row.key}`">
+                  <option
+                    v-for="subcategory in subcategoriesFor(row)"
+                    :key="subcategory.id"
+                    :value="subcategory.name"
+                  />
+                </datalist>
+              </td>
+              <td>
+                <input
+                  v-model="row.paymentMethodName"
+                  :disabled="!isEditable(row)"
+                  list="phase5-payments"
+                >
+              </td>
+              <td><input v-model="row.note" :disabled="!isEditable(row)"></td>
+              <td>
+                <input
+                  type="checkbox"
+                  :checked="Number(row.marked) === 1"
+                  :disabled="!isEditable(row)"
+                  @change="row.marked = $event.target.checked ? 1 : 0"
+                >
+              </td>
+              <td><input v-model="row.bankReference" :disabled="!isEditable(row)"></td>
+              <td>
+                <span v-if="row.deleted">Pending deletion</span>
+                <span v-else-if="row.protected">
+                  Read-only: {{ row.protectionReasons.join(', ') }}
+                </span>
+                <span v-else-if="row.isNew">New</span>
+                <span v-else-if="row.editing">Editing</span>
+                <span v-else>Saved</span>
+              </td>
+              <td class="actions">
+                <button v-if="row.deleted" type="button" @click="row.deleted = false">
+                  Undo
+                </button>
+                <template v-else-if="!row.protected">
+                  <button v-if="!row.editing" type="button" @click="row.editing = true">
+                    Edit
+                  </button>
+                  <button v-else-if="!row.isNew" type="button" @click="cancelEdit(row)">
+                    Cancel
+                  </button>
+                  <button type="button" @click="removeTransaction(row)">
+                    Delete
+                  </button>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </NcAppContent>
 </template>
 
 <script setup>
 import { NcAppContent, NcLoadingIcon } from '@nextcloud/vue'
-import { ref, onMounted, watch, computed } from 'vue'
-import { formatCurrency } from '@/utils/format'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
-import { useRoute } from 'vue-router'
-import { getLanguage } from '@nextcloud/l10n'
-import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+import {
+  buildMutationOperations,
+  calculateTotals,
+  createDrafts,
+  hasPendingChanges,
+  newTransactionDraft,
+  normalizeName,
+} from '@/domain/transactionEditor.mjs'
+import { apiError, fetchEditorSnapshot, mutateDocument } from '@/services/gsbApi'
+
 const store = useStore()
 const route = useRoute()
-const transactions = ref({})
-//const reversedTransactions = computed(() => transactions.value.transactions.slice().reverse())
-const reversedTransactions = computed(() => [...transactions.value.transactions].reverse())
+const router = useRouter()
 const loading = ref(true)
-const selectedAccountId = ref(route.params.id)
-const hasUnsavedChanges = ref(false)
-const languageCode = ref('en')
-const accounts = computed(() => store.state.accounts)
-const parties = ref([])
-const categories = ref([])
-const categoryMap = computed(() => {
-  const map = new Map()
-  categories.value.forEach(c => map.set(c.name, c.subcategories || []))
-  return map
-})
-const subCategories = transaction => categoryMap.value.get(transaction.Cat) ?? []
-var transactionsDelete = []
+const saving = ref(false)
+const snapshot = ref(null)
+const rows = ref([])
+const etag = ref('')
+const selectedAccountId = ref(String(route.params.id))
+const message = ref('')
+const messageType = ref('info')
+const conflict = ref(false)
+let newSequence = 0
+let revertingRoute = false
 
-// Fetch transactions from API
-const fetchTransactions = async () => {
-  loading.value = true
-  languageCode.value = getLanguage()
-  const data = { filePath: store.state.filePath, filePassword: store.state.filePassword }
-  const jsonData = JSON.stringify(data)
-  const requestOptions = { 
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: jsonData
-  }
-  try {
-    const response = await fetch('/apps/ncgrisbi/api/account/' + selectedAccountId.value, requestOptions)
-    const data = await response.json();
-    hasUnsavedChanges.value = false // Reset unsaved changes flag
-    // Initialize isEditing property for each transaction
-    if (data && data.transactions) {
-      data.transactions.forEach(transaction => {
-        transaction.isEditing = false
-      })
-    }
-    transactions.value = data;
-  } catch (error) {
-    console.error('Failed to fetch transactions:', error)
-  }
-  loading.value = false
+const displayedRows = computed(() => [...rows.value].reverse())
+const pendingChanges = computed(() => hasPendingChanges(rows.value))
+const totals = computed(() => calculateTotals(
+  rows.value,
+  snapshot.value?.account?.currency?.precision ?? 2,
+))
+
+function setMessage(text, type = 'info') {
+  message.value = text
+  messageType.value = type
 }
 
-// Fetch parties from API
-const fetchParties = async () => {
-  const data = { filePath: store.state.filePath, filePassword: store.state.filePassword };
-  const jsonData = JSON.stringify(data);
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: jsonData,
-  };
-  try {
-    const response = await fetch('/apps/ncgrisbi/api/parties', requestOptions);
-    const data = await response.json();
-    parties.value = data;
-  } catch (error) {
-    console.error('Failed to fetch parties:', error);
-  }
-};
-
-// Fetch categories from API
-const fetchCategories = async () => {
-  const data = { filePath: store.state.filePath, filePassword: store.state.filePassword };
-  const jsonData = JSON.stringify(data);
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: jsonData,
-  };
-  try {
-    const response = await fetch('/apps/ncgrisbi/api/categories', requestOptions);
-    const data = await response.json();
-    categories.value = data;
-    const newCategory = {
-      id: '0',
-      name: 'Transfer',
-      subcategories: []
-    }
-    accounts.value.forEach(account => {
-      const subcategory = {
-        'id': account.id,
-        'name': account.name
-      }
-      newCategory.subcategories.push(subcategory)
-    })
-    categories.value.push(newCategory)
-  } catch (error) {
-    console.error('Failed to fetch categories:', error);
-  }
-};
-
-// Show confirmation dialog
-const showConfirmationDialog = async () => {
-  return new Promise((resolve) => {
-    const confirmed = confirm('You have unsaved changes. Do you want to save them before switching accounts?');
-    resolve(confirmed);
-  });
-}
-
-// Call fetchTransactions function when component is mounted
-onMounted(fetchParties);
-onMounted(fetchCategories);
-onMounted(fetchTransactions)
-
-// Watch for changes to route.params.id and refetch transactions if it changes
-watch(() => route.params.id, async (newId) => {
-  if (hasUnsavedChanges.value) {
-    if (await showConfirmationDialog()) {
-      await saveTransactions()
-    }
-  }
-  selectedAccountId.value = newId
-  fetchTransactions()
-})
-
-const saveTransactions = async () => {
+async function loadSnapshot() {
   loading.value = true
-  const formatedTransactions = []
-  const transactionsList = transactions.value.transactions.filter((t) => t.isEditing)
-  if (transactionsList.length > 0 || transactionsDelete.length > 0) {
-    transactionsList.forEach(transaction => {
-      const subcategoryList = subCategories(transaction)
-      const partyid = getTransactionElementId(parties.value, transaction['Pa'])
-      const catid = getTransactionElementId(categories.value, transaction['Cat'])
-      var subcatid = getTransactionElementId(subcategoryList, transaction['SCat'])
-      if (( transaction['Cat'] == 'Transfer') && (catid == '0') && (subcatid != '0') && (subcatid != 'selectedAccountId.value')) {
-        subcatid = '0'
-        transaction['STx'] = transactions.value.next_id.toString()
-        transactions.value.next_id = transactions.value.next_id + 1
-      }
-      const formatedTransaction = {
-        'Ac': selectedAccountId.value,
-        'Nb': transaction['TxNb'],
-        'Id': "(null)",
-        'Dt': transaction['Date'],
-        'Dv': "(null)",
-        'Cu': transactions.value.currency.id,
-        'Am': transaction['Am'].toString(),
-        'Exb': "0",
-        'Exr': "0.00",
-        'Exf': "0.00",
-        'Pa': partyid,
-        'Ca': catid,
-        'Sca': subcatid,
-        'Br': transaction['BR'],
-        'No': convertEmptyStringToNull(transaction['Note']),
-        'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['PM']),
-        'Pc': "(null)",
-        'Ma': transaction['Ma'].toString(),
-        'Ar': "0",
-        'Au': "0",
-        'Re': "0",
-        'Fi': "0",
-        'Bu': "0",
-        'Sbu': "0",
-        'Vo': "(null)",
-        'Ba': "(null)",
-        'Trt': transaction['STx'],
-        'Mo': "0"
-      }
-      formatedTransactions.push(formatedTransaction)
-      if (transaction['STx'] !== "0") {
-        const formatedSplitTransaction = {
-          'Ac': getTransactionElementId(accounts.value, transaction['SCat']),
-          'Nb': transaction['STx'],
-          'Id': "(null)",
-          'Dt': transaction['Date'],
-          'Dv': "(null)",
-          'Cu': transactions.value.currency.id,
-          'Am': (-transaction['Am']).toString(),
-          'Exb': "0",
-          'Exr': "0.00",
-          'Exf': "0.00",
-          'Pa': partyid,
-          'Ca': catid,
-          'Sca': subcatid,
-          'Br': transaction['BR'],
-          'No': "(null)",
-          'Pn': getTransactionElementId(transactions.value.payment_methods, transaction['PM']),
-          'Pc': "(null)",
-          'Ma': "0",
-          'Ar': "0",
-          'Au': "0",
-          'Re': "0",
-          'Fi': "0",
-          'Bu': "0",
-          'Sbu': "0",
-          'Vo': "(null)",
-          'Ba': "(null)",
-          'Trt': transaction['TxNb'],
-          'Mo': "0"
-        }
-        formatedTransactions.push(formatedSplitTransaction)
-      }
-    })
-
-    transactionsDelete.forEach(number => {
-      const formatedTransaction = {
-        'Nb': number,
-        'Delete': "True"
-      }
-      formatedTransactions.push(formatedTransaction)
-    })
-    const data = {
+  conflict.value = false
+  try {
+    const response = await fetchEditorSnapshot({
+      accountId: selectedAccountId.value,
       filePath: store.state.filePath,
       filePassword: store.state.filePassword,
-      transactionDataJson: JSON.stringify(formatedTransactions), // Send the transaction object as a JSON string
-    };
-
-    const requestOptions = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    };
-
-    try {
-      const response = await fetch('/apps/ncgrisbi/api/savetransaction', requestOptions);
-      if (response.ok) {
-        transactionsList.forEach(transaction => {
-          transaction.isEditing = false; // Exit edit mode on successful save
-        })
-        hasUnsavedChanges.value = false // Reset unsaved changes flag after successful save
-        transactionsDelete = []
-      }
-    } catch (error) {
-      console.error('Failed to save transaction:', error);
-    }
-  }
-  loading.value = false
-};
-
-// Edit transaction
-function editTransaction(t) {
-  t.isEditing=true
-  t.originalAmount = t.Am; // Store original amount
-  hasUnsavedChanges.value = true // Mark as unsaved changes when edit a transaction
-}
-
-// Format date
-const formatDate = () => {
-  const current = new Date()
-  const month = (current.getMonth() + 1).toString().padStart(2, '0')
-  const day = current.getDate().toString().padStart(2, '0')
-  const year = current.getFullYear()
-  return `${month}/${day}/${year}`;
-}
-
-// Convert null string to empty string
-function convertNullStringToEmpty(str) {
-    return str === "(null)" ? "" : str;
-}
-
-// Convert empty string to null string
-function convertEmptyStringToNull(str) {
-    return str === "" ? "(null)" : str;
-}
-
-// Add new transaction
-const addNewTransaction = () => {
-  const newTransaction = {
-    TxNb: transactions.value.next_id.toString(),
-    Date: formatDate(),
-    Am: 0,
-    Cur: transactions.value.currency.name,
-    Pa: '',
-    Cat: '',
-    SCat: '',
-    PM: '',
-    Note: '',
-    Ma: 0,
-    BR: "0",
-    STx: "0",
-    originalAmount: 0,
-    isEditing: true // New transactions are in edit mode by default
-  }
-  hasUnsavedChanges.value = true // Mark as unsaved changes when adding a new transaction
-  transactions.value.next_id = transactions.value.next_id + 1
-  transactions.value.transactions.push(newTransaction)
-}
-
-// Update Amount Category ans SubCategory on Party changes
-function onPartyChange(t) {
-  const party = parties.value.find(p => p.name === t.Pa)
-  if (party) {
-    if (t.Am == 0) { 
-      t.Am = party.last_amount
-      onAmountChange(t)
-    }
-    if (t.Cat == '') {
-      t.Cat = party.last_category
-    }
-    if (t.SCat == '') {
-      t.SCat = party.last_subcategory
-    }
-    if (t.PM == '') {
-      t.PM = party.last_pm
-    }
-    if (t.Note == '') {
-      t.Note = party.last_note
-    }
+    })
+    snapshot.value = response.snapshot
+    etag.value = response.document.etag
+    rows.value = createDrafts(response.snapshot)
+    setMessage('')
+  } catch (error) {
+    const failure = apiError(error)
+    setMessage(failure.message, 'error')
+  } finally {
+    loading.value = false
   }
 }
 
-function onAmountChange(t) {
-  transactions.value.total_amount = transactions.value.total_amount - t.originalAmount + t.Am
-  if (t.Ma) transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.originalAmount + t.Am
-  t.originalAmount = t.Am
+function isEditable(row) {
+  return !row.deleted && !row.protected && row.editing
 }
 
-function onMarkedChange(t, e) {
-  if (e.target.checked) {
-     t.Ma = 1
-     transactions.value.total_marked_amount = transactions.value.total_marked_amount + t.Am
+function subcategoriesFor(row) {
+  const key = normalizeName(row.categoryName)
+  const category = snapshot.value.categories.find(item => normalizeName(item.name) === key)
+  return category?.subcategories ?? []
+}
+
+function today() {
+  const value = new Date()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${month}/${day}/${value.getFullYear()}`
+}
+
+function addTransaction() {
+  newSequence += 1
+  rows.value.push(newTransactionDraft(snapshot.value, `new-${newSequence}`, today()))
+}
+
+function cancelEdit(row) {
+  Object.assign(row, row.original)
+  row.editing = false
+}
+
+function removeTransaction(row) {
+  if (row.isNew) {
+    rows.value = rows.value.filter(candidate => candidate.key !== row.key)
   } else {
-     t.Ma = 0
-     transactions.value.total_marked_amount = transactions.value.total_marked_amount - t.Am
+    row.deleted = true
+    row.editing = false
   }
 }
 
-// Get transaction element ID
-function getTransactionElementId(g, n) {
-  const r = g.find(e => e.name === n)
-  return r ? r.id : '0';
+async function saveChanges() {
+  let operations
+  try {
+    operations = buildMutationOperations(rows.value, snapshot.value)
+  } catch (error) {
+    setMessage(error.message, 'error')
+    return
+  }
+  if (operations.length === 0) {
+    setMessage('There are no validated changes to save.')
+    return
+  }
+
+  saving.value = true
+  try {
+    const response = await mutateDocument({
+      filePath: store.state.filePath,
+      filePassword: store.state.filePassword,
+      baseEtag: etag.value,
+      operations,
+    })
+    etag.value = response.document.etag
+    setMessage('Transactions saved successfully.', 'success')
+    await loadSnapshot()
+  } catch (error) {
+    const failure = apiError(error)
+    conflict.value = failure.code === 'etag-conflict'
+    setMessage(
+      conflict.value
+        ? 'The GSB file changed elsewhere. Your draft is preserved; reload before saving again.'
+        : failure.message,
+      'error',
+    )
+  } finally {
+    saving.value = false
+  }
 }
 
-// Delete transaction
-function deleteTransaction(number, snb) {
-  if (!transactionsDelete.includes(number)) transactionsDelete.push(number)
-  if ((snb != '0')&&(!transactionsDelete.includes(snb))) transactionsDelete.push(snb)
-  const index = transactions.value.transactions.findIndex(t => t['TxNb'] === number)
-  transactions.value.transactions.splice(index, 1)
+async function reloadSnapshot() {
+  if (pendingChanges.value && !window.confirm('Discard all unsaved transaction changes?')) {
+    return
+  }
+  await loadSnapshot()
 }
+
+async function reloadAfterConflict() {
+  if (!window.confirm('Reload the current file and discard this local draft?')) {
+    return
+  }
+  await loadSnapshot()
+}
+
+onMounted(loadSnapshot)
+
+watch(() => route.params.id, async newId => {
+  if (revertingRoute) {
+    revertingRoute = false
+    return
+  }
+  if (pendingChanges.value && !window.confirm('Discard unsaved changes and switch accounts?')) {
+    revertingRoute = true
+    await router.replace({ name: 'Account', params: { id: selectedAccountId.value } })
+    return
+  }
+  selectedAccountId.value = String(newId)
+  await loadSnapshot()
+})
 </script>
 
 <style scoped>
-/* container for both header + body */
-.transaction-wrapper {
-  display: flex;
-  flex-direction: column;
-}
-
-.grid-scroll {
-  width: 100%;
-  overflow-x: auto;   /* horizontal scroll when needed */
-}
-/* shared grid definition */ .grid-row {
-  display: grid;
-  grid-template-columns:
-    60px               /* #        */
-    120px              /* Date     */
-    110px              /* Amount   */
-    180px              /* Party    */
-    340px              /* Category */
-    150px              /* Pay-Meth */
-    180px              /* Note     */
-    60px               /* Marked   */
-    140px              /* Bank Ref */
-    140px              /* Split    */
-    100px;             /* Actions  */
-  align-items: center;
-  gap: 4px;
-}
-/* header cosmetics */
-.header {
-  font-weight: bold;
-  background: var(--color-background-dark); border-bottom: 1px solid var(--color-border);
-  padding: 6px 4px;
-}
-
-/* body cosmetics */
-.body:nth-child(even) { background: var(--color-background-darker); }
-.body > span { padding: 4px; }
-
-/* keep category + subcategory on one line inside the same cell */
-.col-cat {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* scroller height */
-.scroller {
-  height: 400px;   /* or flex: 1 */
-  width: 172%;
-}
-
-.bright-row input{
- color: var(--color-main-text);
- border-color: #bbbbbb;
-}
-
-.col-amount input{
- text-align: right;
- width: 100px;
-}
-
-.col-party input{
- width: 170px;
-}
-
-.col-cat input{
- width: 150px;
-}
-
-.col-date input{
- width: 110px;
-}
-
-.col-pm input{
- width: 140px;
-}
-
-.col-note input{
- width: 170px;
-}
-
-.checkbox-wrapper-13 input[type=checkbox] {
-      --active: #275EFE;
-      --active-inner: #fff;
-      --focus: 2px rgba(39, 94, 254, .3);
-      --border: #BBC1E1;
-      --border-hover: #275EFE;
-      --background: #fff;
-      --disabled: #F6F8FF;
-      --disabled-inner: #E1E6F9;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      height: 21px;
-      min-height: 21px;
-      outline: none;
-      display: inline-block;
-      vertical-align: top;
-      position: relative;
-      margin: 0;
-      cursor: pointer;
-      border: 1px solid var(--bc, var(--border));
-      background: var(--b, var(--background));
-      transition: background 0.3s, border-color 0.3s, box-shadow 0.2s;
-}
-.checkbox-wrapper-13 input[type=checkbox]:after {
-    content: "";
-      display: block;
-      left: 0;
-      top: 0;
-      position: absolute;
-      transition: transform var(--d-t, 0.3s) var(--d-t-e, ease), opacity var(--d-o, 0.2s);
-}
-.checkbox-wrapper-13 input[type=checkbox]:checked {
-      --b: var(--active);
-      --bc: var(--active);
-      --d-o: .3s;
-      --d-t: .6s;
-      --d-t-e: cubic-bezier(.2, .85, .32, 1.2);
-}
-.checkbox-wrapper-13 input[type=checkbox]:disabled {
-      --b: var(--disabled);
-      cursor: not-allowed;
-      opacity: 0.9;
-}
-.checkbox-wrapper-13 input[type=checkbox]:disabled:checked {
-      --b: #1b307e;
-      --bc: var(--border);
-}
-.checkbox-wrapper-13 input[type=checkbox]:disabled + label {
-      cursor: not-allowed;
-}
-.checkbox-wrapper-13 input[type=checkbox]:hover:not(:checked):not(:disabled) {
-      --bc: var(--border-hover);
-}
-.checkbox-wrapper-13 input[type=checkbox]:focus {
-      box-shadow: 0 0 0 var(--focus);
-}
-.checkbox-wrapper-13 input[type=checkbox]:not(.switch) {
-      width: 21px;
-}
-.checkbox-wrapper-13 input[type=checkbox]:not(.switch):after {
-      opacity: var(--o, 0);
-}
-.checkbox-wrapper-13 input[type=checkbox]:not(.switch):checked {
-      --o: 1;
-}
-.checkbox-wrapper-13 input[type=checkbox] + label {
-      display: inline-block;
-      vertical-align: middle;
-      cursor: pointer;
-      margin-left: 4px;
-}
-
-.checkbox-wrapper-13 input[type=checkbox]:not(.switch) {
-      border-radius: 7px;
-}
-.checkbox-wrapper-13 input[type=checkbox]:not(.switch):after {
-      width: 5px;
-      height: 9px;
-      border: 2px solid var(--active-inner);
-      border-top: 0;
-      border-left: 0;
-      left: 7px;
-      top: 4px;
-      transform: rotate(var(--r, 20deg));
-}
-.checkbox-wrapper-13 input[type=checkbox]:not(.switch):checked {
-      --r: 43deg;
-}
-
-.checkbox-wrapper-13 * {
-    box-sizing: inherit;
-}
-.checkbox-wrapper-13 *:before,
-.checkbox-wrapper-13 *:after {
-    box-sizing: inherit;
-}
-
+.editor { padding: 16px; }
+.loading { display: flex; gap: 12px; align-items: center; justify-content: center; min-height: 240px; }
+.account-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+.account-header h2 { margin-bottom: 4px; }
+.account-header p { opacity: .7; }
+.totals { display: flex; flex-direction: column; text-align: right; }
+.toolbar { display: flex; gap: 8px; margin: 16px 0; }
+.message { margin: 0 0 12px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); }
+.message.error { border-color: var(--color-error); }
+.message.success { border-color: var(--color-success); }
+.message button { margin-left: 12px; }
+.table-scroll { overflow: auto; max-height: 65vh; }
+.transactions-table { min-width: 1500px; width: 100%; border-collapse: collapse; }
+th, td { padding: 5px; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+th { position: sticky; top: 0; background: var(--color-main-background); z-index: 1; text-align: left; }
+td input:not([type='checkbox']) { width: 100%; min-width: 105px; }
+tr.deleted { opacity: .55; text-decoration: line-through; }
+tr.protected { background: var(--color-background-dark); }
+.actions { white-space: nowrap; }
+.actions button { margin-right: 4px; }
 </style>
