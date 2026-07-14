@@ -1,12 +1,16 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
+import { decodeCompactSnapshot } from '@/domain/snapshotWire.mjs'
 
 export async function fetchEditorSnapshot({ accountId, filePath, filePassword }) {
   const url = generateUrl('/apps/ncgrisbi/api/editor/account/{accountId}', {
     accountId: String(accountId),
   })
   const response = await axios.post(url, { filePath, filePassword })
-  return response.data
+  return {
+    ...response.data,
+    snapshot: decodeCompactSnapshot(response.data.snapshot),
+  }
 }
 
 export async function mutateDocument({ filePath, filePassword, baseEtag, operations }) {
