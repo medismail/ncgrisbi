@@ -45,6 +45,7 @@ jobs:
 
       - name: Check Phase 5 JavaScript modules
         run: |
+          node --check src/domain/snapshotWire.mjs
           node --check src/domain/transactionEditor.mjs
           node --check src/services/gsbApi.js
 
