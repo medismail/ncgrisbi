@@ -7,6 +7,13 @@ from .errors import MutationError, RecordNotFoundError
 
 _NULL_VALUES = (None, "(null)")
 
+# Transaction flag bits used by the compact wire format.
+TX_BREAKDOWN = 1
+TX_SPLIT_CHILD = 2
+TX_TRANSFER = 4
+TX_BROKEN_TRANSFER = 8
+TX_CROSS_CURRENCY = 16
+
 
 def _nullable(value: Optional[str]) -> Optional[str]:
     return None if value in _NULL_VALUES else value
@@ -19,7 +26,9 @@ def _canonical_positive_id(value: Any, field: str) -> str:
     except (TypeError, ValueError):
         raise MutationError("%s must be a numeric Grisbi identifier" % field)
     if number <= 0 or str(number) != text:
-        raise MutationError("%s is not a canonical positive Grisbi identifier" % field)
+        raise MutationError(
+            "%s is not a canonical positive Grisbi identifier" % field
+        )
     return text
 
 
@@ -45,7 +54,10 @@ def _format_decimal(value: Decimal, precision: int) -> str:
     return format(value.quantize(quantum), ".%df" % precision)
 
 
-def _index_by_attribute(elements: Iterable[Any], attribute: str) -> Dict[str, Any]:
+def _index_by_attribute(
+    elements: Iterable[Any],
+    attribute: str,
+) -> Dict[str, Any]:
     indexed: Dict[str, Any] = {}
     for element in elements:
         key = element.get(attribute)
@@ -54,24 +66,51 @@ def _index_by_attribute(elements: Iterable[Any], attribute: str) -> Dict[str, An
     return indexed
 
 
-def _protection(attributes: Mapping[str, str]) -> List[str]:
-    reasons: List[str] = []
-    if attributes.get("Br", "0") not in ("0", "(null)"):
-        reasons.append("breakdown")
-    if attributes.get("Trt", "0") not in ("0", "(null)"):
-        reasons.append("transfer")
-    if attributes.get("Mo", "0") not in ("0", "(null)"):
-        reasons.append("split-child")
-    return reasons
+def _payment_sign_matches(payment: Any, amount: Decimal) -> bool:
+    if payment is None or amount == 0:
+        return True
+    sign = payment.get("Sign", "0")
+    return sign == "0" or (amount < 0 and sign == "1") or (
+        amount > 0 and sign == "2"
+    )
+
+
+def _mapped_payment_id(
+    source_payment: Any,
+    current_account_id: str,
+    payments_by_account: Mapping[str, List[Any]],
+    amount: Decimal,
+) -> str:
+    if source_payment is None:
+        return "0"
+    if (
+        source_payment.get("Account") == current_account_id
+        and _payment_sign_matches(source_payment, amount)
+    ):
+        return source_payment.get("Number") or "0"
+    name = (source_payment.get("Name") or "").casefold()
+    for candidate in payments_by_account.get(current_account_id, []):
+        if (
+            (candidate.get("Name") or "").casefold() == name
+            and _payment_sign_matches(candidate, amount)
+        ):
+            return candidate.get("Number") or "0"
+    return "0"
 
 
 def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
-    """Build the typed Phase 5 editor snapshot from a validated GSB document."""
+    """Build a compact, lossless editor snapshot.
+
+    The wire format intentionally uses short keys and positional arrays. The
+    browser reconstructs descriptive objects. Names are therefore not repeated
+    in every transaction row, which materially reduces large-account payloads.
+    """
     account_id = _canonical_positive_id(account_id, "accountId")
     root = document.root
 
-    accounts = _index_by_attribute(root.findall("Account"), "Number")
-    account = accounts.get(account_id)
+    account_elements = list(root.findall("Account"))
+    accounts_by_id = _index_by_attribute(account_elements, "Number")
+    account = accounts_by_id.get(account_id)
     if account is None:
         raise RecordNotFoundError("Account %s does not exist" % account_id)
 
@@ -80,19 +119,21 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     currency = currencies.get(currency_id)
     if currency is None:
         raise MutationError(
-            "Account %s references missing currency %s" % (account_id, currency_id)
+            "Account %s references missing currency %s"
+            % (account_id, currency_id)
         )
     try:
         precision = int(currency.get("Fl", "2"))
     except ValueError:
         raise MutationError("Currency %s has invalid precision" % currency_id)
     if precision < 0 or precision > 12:
-        raise MutationError("Currency %s has unsupported precision" % currency_id)
+        raise MutationError(
+            "Currency %s has unsupported precision" % currency_id
+        )
 
     party_elements = list(root.findall("Party"))
-    parties_by_id = _index_by_attribute(party_elements, "Nb")
     parties = [
-        {"id": element.get("Nb"), "name": element.get("Na") or ""}
+        [element.get("Nb") or "", element.get("Na") or ""]
         for element in sorted(
             party_elements,
             key=lambda element: _numeric_key(element.get("Nb") or ""),
@@ -100,125 +141,229 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     ]
 
     category_elements = list(root.findall("Category"))
-    categories_by_id = _index_by_attribute(category_elements, "Nb")
-    subcategories_by_key: Dict[Tuple[str, str], Any] = {}
-    subcategories_by_category: Dict[str, List[Dict[str, str]]] = {}
+    subcategories_by_category: Dict[str, List[List[str]]] = {}
     for element in root.findall("Sub_category"):
-        category = element.get("Nbc") or ""
+        category_number = element.get("Nbc") or ""
         number = element.get("Nb") or ""
-        subcategories_by_key[(category, number)] = element
-        subcategories_by_category.setdefault(category, []).append(
-            {"id": number, "name": element.get("Na") or ""}
+        subcategories_by_category.setdefault(category_number, []).append(
+            [number, element.get("Na") or ""]
         )
     for values in subcategories_by_category.values():
-        values.sort(key=lambda item: _numeric_key(item["id"]))
+        values.sort(key=lambda item: _numeric_key(item[0]))
 
-    categories = []
+    categories: List[List[Any]] = []
     for element in sorted(
         category_elements,
         key=lambda value: _numeric_key(value.get("Nb") or ""),
     ):
         number = element.get("Nb") or ""
+        try:
+            kind = int(element.get("Kd", "0"))
+        except ValueError:
+            kind = 0
         categories.append(
-            {
-                "id": number,
-                "name": element.get("Na") or "",
-                "kind": int(element.get("Kd", "0")),
-                "subcategories": subcategories_by_category.get(number, []),
-            }
+            [
+                number,
+                element.get("Na") or "",
+                kind,
+                subcategories_by_category.get(number, []),
+            ]
         )
 
-    payment_elements = [
-        element
-        for element in root.findall("Payment")
-        if element.get("Account") == account_id
-    ]
+    # Grisbi payment numbers are global identifiers. Account is a property used
+    # by the form to filter choices, not part of the payment identity.
+    payment_elements = list(root.findall("Payment"))
     payments_by_id = _index_by_attribute(payment_elements, "Number")
-    payment_methods = [
-        {
-            "id": element.get("Number") or "",
-            "name": element.get("Name") or "",
-            "sign": element.get("Sign") or "0",
-        }
-        for element in sorted(
-            payment_elements,
+    payments_by_account: Dict[str, List[Any]] = {}
+    for element in payment_elements:
+        payments_by_account.setdefault(element.get("Account") or "", []).append(
+            element
+        )
+    payment_groups: List[List[Any]] = []
+    for payment_account, values in sorted(
+        payments_by_account.items(),
+        key=lambda item: _numeric_key(item[0]),
+    ):
+        values = sorted(
+            values,
             key=lambda value: _numeric_key(value.get("Number") or ""),
         )
-    ]
+        payment_groups.append(
+            [
+                payment_account,
+                [
+                    [
+                        element.get("Number") or "",
+                        element.get("Name") or "",
+                        int(element.get("Sign", "0") or 0),
+                        int(element.get("Show_entry", "0") or 0),
+                        int(element.get("Automatic_number", "0") or 0),
+                        _nullable(element.get("Current_number")),
+                    ]
+                    for element in values
+                ],
+            ]
+        )
+
+    accounts: List[List[Any]] = []
+    for element in sorted(
+        account_elements,
+        key=lambda value: _numeric_key(value.get("Number") or ""),
+    ):
+        accounts.append(
+            [
+                element.get("Number") or "",
+                element.get("Name") or "",
+                int(element.get("Kind", "0") or 0),
+                element.get("Currency") or "",
+                element.get("Default_debit_method") or "0",
+                element.get("Default_credit_method") or "0",
+                int(element.get("Closed_account", "0") or 0),
+            ]
+        )
+
+    transaction_elements = list(root.findall("Transaction"))
+    transactions_by_id = _index_by_attribute(transaction_elements, "Nb")
 
     total = Decimal("0")
     marked_total = Decimal("0")
-    transactions: List[Dict[str, Any]] = []
-    for element in root.findall("Transaction"):
+    transactions: List[List[Any]] = []
+    for element in transaction_elements:
         if element.get("Ac") != account_id:
             continue
         attributes = dict(element.attrib)
         transaction_id = attributes.get("Nb") or ""
-        amount = _decimal(attributes.get("Am"), "Transaction %s amount" % transaction_id)
+        amount = _decimal(
+            attributes.get("Am"),
+            "Transaction %s amount" % transaction_id,
+        )
         total += amount
         if attributes.get("Ma", "0") == "1":
             marked_total += amount
 
-        party_id = attributes.get("Pa", "0")
-        category_id = attributes.get("Ca", "0")
-        subcategory_id = attributes.get("Sca", "0")
-        payment_id = attributes.get("Pn", "0")
-        party = parties_by_id.get(party_id)
-        category = categories_by_id.get(category_id)
-        subcategory = subcategories_by_key.get((category_id, subcategory_id))
-        payment = payments_by_id.get(payment_id)
-        protection = _protection(attributes)
+        transfer_id = attributes.get("Trt", "0")
+        target_account_id: Optional[str] = None
+        target_payment_id: Optional[str] = None
+        flags = 0
+        if attributes.get("Br", "0") not in ("0", "(null)"):
+            flags |= TX_BREAKDOWN
+        if attributes.get("Mo", "0") not in ("0", "(null)"):
+            flags |= TX_SPLIT_CHILD
+        if transfer_id not in ("0", "(null)"):
+            counterpart = transactions_by_id.get(transfer_id)
+            if (
+                counterpart is None
+                or counterpart.get("Trt", "0") != transaction_id
+            ):
+                flags |= TX_BROKEN_TRANSFER
+            else:
+                flags |= TX_TRANSFER
+                target_account_id = counterpart.get("Ac") or None
+                target_payment_id = counterpart.get("Pn") or "0"
+                if counterpart.get("Cu") != attributes.get("Cu"):
+                    flags |= TX_CROSS_CURRENCY
 
         transactions.append(
-            {
-                "id": transaction_id,
-                "date": attributes.get("Dt") or "",
-                "valueDate": _nullable(attributes.get("Dv")),
-                "amount": attributes.get("Am") or "0",
-                "currencyId": attributes.get("Cu") or currency_id,
-                "partyId": party_id,
-                "partyName": party.get("Na") if party is not None else None,
-                "categoryId": category_id,
-                "categoryName": category.get("Na") if category is not None else None,
-                "subcategoryId": subcategory_id,
-                "subcategoryName": subcategory.get("Na") if subcategory is not None else None,
-                "paymentMethodId": payment_id,
-                "paymentMethodName": payment.get("Name") if payment is not None else None,
-                "note": _nullable(attributes.get("No")),
-                "paymentReference": _nullable(attributes.get("Pc")),
-                "marked": int(attributes.get("Ma", "0")),
-                "voucher": _nullable(attributes.get("Vo")),
-                "bankReference": _nullable(attributes.get("Ba")),
-                "protected": bool(protection),
-                "protectionReasons": protection,
-                "transferTransactionId": (
-                    None if attributes.get("Trt", "0") in ("0", "(null)")
-                    else attributes.get("Trt")
-                ),
-                "splitMotherId": (
-                    None if attributes.get("Mo", "0") in ("0", "(null)")
-                    else attributes.get("Mo")
-                ),
-            }
+            [
+                transaction_id,
+                attributes.get("Dt") or "",
+                _nullable(attributes.get("Dv")),
+                attributes.get("Am") or "0",
+                attributes.get("Pa", "0"),
+                attributes.get("Ca", "0"),
+                attributes.get("Sca", "0"),
+                attributes.get("Pn", "0"),
+                _nullable(attributes.get("No")),
+                _nullable(attributes.get("Pc")),
+                int(attributes.get("Ma", "0") or 0),
+                _nullable(attributes.get("Vo")),
+                _nullable(attributes.get("Ba")),
+                attributes.get("Br", "0"),
+                None if transfer_id in ("0", "(null)") else transfer_id,
+                _nullable(attributes.get("Mo")),
+                flags,
+                target_account_id,
+                target_payment_id,
+            ]
+        )
+
+    # Grisbi completion prefers the last payee transaction in the current
+    # account, then the last one in another account. Split children are ignored.
+    current_history: Dict[str, Any] = {}
+    other_history: Dict[str, Any] = {}
+    for element in transaction_elements:
+        party_id = element.get("Pa", "0")
+        if party_id in ("0", "(null)") or element.get("Mo", "0") not in (
+            "0",
+            "(null)",
+        ):
+            continue
+        if element.get("Ac") == account_id:
+            current_history[party_id] = element
+        else:
+            other_history[party_id] = element
+
+    histories: List[List[Any]] = []
+    for party_id in sorted(
+        set(current_history) | set(other_history),
+        key=_numeric_key,
+    ):
+        element = current_history.get(party_id)
+        if element is None:
+            element = other_history.get(party_id)
+        if element is None:
+            continue
+        amount = _decimal(element.get("Am"), "Completion amount")
+        source_payment = payments_by_id.get(element.get("Pn", "0"))
+        mapped_payment = _mapped_payment_id(
+            source_payment,
+            account_id,
+            payments_by_account,
+            amount,
+        )
+        target_account = None
+        transfer_id = element.get("Trt", "0")
+        if transfer_id not in ("0", "(null)"):
+            counterpart = transactions_by_id.get(transfer_id)
+            if (
+                counterpart is not None
+                and counterpart.get("Trt", "0") == element.get("Nb")
+            ):
+                target_account = counterpart.get("Ac")
+        histories.append(
+            [
+                party_id,
+                element.get("Ac") or "",
+                element.get("Am") or "0",
+                element.get("Ca", "0"),
+                element.get("Sca", "0"),
+                mapped_payment,
+                _nullable(element.get("No")),
+                _nullable(element.get("Pc")),
+                _nullable(element.get("Vo")),
+                _nullable(element.get("Ba")),
+                target_account,
+            ]
         )
 
     return {
-        "account": {
-            "id": account_id,
-            "name": account.get("Name") or "",
-            "kind": account.get("Kind") or "0",
-            "currency": {
-                "id": currency_id,
-                "name": currency.get("Na") or "",
-                "code": currency.get("Ico") or "",
-                "symbol": currency.get("Co") or "",
-                "precision": precision,
-            },
-            "totalAmount": _format_decimal(total, precision),
-            "totalMarkedAmount": _format_decimal(marked_total, precision),
-        },
-        "parties": parties,
-        "categories": categories,
-        "paymentMethods": payment_methods,
-        "transactions": transactions,
+        "v": 2,
+        "a": [
+            account_id,
+            account.get("Name") or "",
+            int(account.get("Kind", "0") or 0),
+            currency_id,
+            currency.get("Na") or "",
+            currency.get("Ico") or "",
+            currency.get("Co") or "",
+            precision,
+            _format_decimal(total, precision),
+            _format_decimal(marked_total, precision),
+        ],
+        "A": accounts,
+        "P": parties,
+        "C": categories,
+        "M": payment_groups,
+        "T": transactions,
+        "H": histories,
     }
