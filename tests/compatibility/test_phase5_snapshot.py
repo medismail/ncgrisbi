@@ -30,25 +30,20 @@ def test_compact_snapshot_has_ids_bank_reference_and_completion() -> None:
 
 
 def test_reciprocal_transfer_is_editable() -> None:
-    raw = FIXTURE.read_bytes()
-    raw = raw.replace(
-        b'Ca="2" Sca="1" Br="0"',
-        b'Ca="0" Sca="0" Br="0"',
-        2,
-    )
-    raw = raw.replace(b'Am="1000.00"', b'Am="-1000.00"', 1)
-    raw = raw.replace(
-        b'Trt="0" Mo="0" />',
-        b'Trt="12" Mo="0" />',
-        1,
-    )
-    raw = raw.replace(
-        b'Trt="0" Mo="0" />',
-        b'Trt="11" Mo="0" />',
-        1,
-    )
-
-    snapshot = build_account_snapshot(parse_document(raw), "1")
+    lines = FIXTURE.read_bytes().splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if b'Nb="11"' in line:
+            lines[index] = (
+                line.replace(b'Am="1000.00"', b'Am="-1000.00"')
+                .replace(b'Ca="2" Sca="1"', b'Ca="0" Sca="0"')
+                .replace(b'Trt="0"', b'Trt="12"')
+            )
+        elif b'Nb="12"' in line:
+            lines[index] = (
+                line.replace(b'Ca="2" Sca="1"', b'Ca="0" Sca="0"')
+                .replace(b'Trt="0"', b'Trt="11"')
+            )
+    snapshot = build_account_snapshot(parse_document(b"".join(lines)), "1")
     transfer = next(item for item in snapshot["T"] if item[0] == "11")
     assert transfer[16] & TX_TRANSFER
     assert transfer[17] == "2"
