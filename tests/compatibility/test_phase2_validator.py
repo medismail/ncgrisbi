@@ -43,12 +43,15 @@ def test_duplicate_transaction_ids_are_reported() -> None:
         assert_valid_document(document)
 
 
-def test_missing_party_and_wrong_payment_account_are_reported() -> None:
+def test_missing_party_is_reported_but_existing_payment_number_remains_compatible() -> None:
     raw = FIXTURE.read_bytes().replace(
         b'Pa="1" Ca="1"',
         b'Pa="99" Ca="1"',
         1,
     )
+    # Move transaction 12 to account 1 while retaining payment number 2, whose
+    # Payment record belongs to account 2. Grisbi can still resolve Pn globally;
+    # account/sign restrictions apply only when the selection is changed.
     raw = raw.replace(
         b'Ac="2" Nb="12"',
         b'Ac="1" Nb="12"',
@@ -57,7 +60,16 @@ def test_missing_party_and_wrong_payment_account_are_reported() -> None:
     document = parse_document(raw)
     codes = {issue.code for issue in validate_document(document)}
     assert "missing-party" in codes
-    assert "missing-payment" in codes
+    assert "missing-payment" not in codes
+
+
+def test_missing_global_payment_number_is_reported() -> None:
+    raw = FIXTURE.read_bytes().replace(b'Pn="1" Pc=', b'Pn="99" Pc=', 1)
+    document = parse_document(raw)
+    assert any(
+        issue.code == "missing-payment"
+        for issue in validate_document(document)
+    )
 
 
 def test_nonreciprocal_transfer_is_reported() -> None:
