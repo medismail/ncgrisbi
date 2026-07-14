@@ -1,77 +1,58 @@
-# Phase 5: normal transaction CRUD
+# Phase 5: optimized Grisbi-compatible transaction editor
 
-Phase 5 connects the Vue account editor to the typed, lossless mutation stack built in Phases 1–4. The browser no longer reconstructs raw Grisbi XML attributes and no longer calls the disabled `/api/savetransaction` endpoint.
+Phase 5 connects the Vue editor to typed lossless mutations while retaining the behaviour users depend on in Grisbi 1.2.2: compact account loading, account/sign-aware payment choices, reciprocal transfers, and payee completion.
 
-## Typed account snapshot
+## Compact account snapshot
 
-The editor loads:
+`POST /apps/ncgrisbi/api/editor/account/{accountId}` returns an ETag-consistent version-2 wire snapshot. The wire shape uses short keys and positional arrays and does not repeat party, category, subcategory, payment, or account names in every transaction. The browser decodes it into descriptive objects in `snapshotWire.mjs`.
 
-```text
-POST /apps/ncgrisbi/api/editor/account/{accountId}
-```
+The transaction list uses `DynamicScroller`; only visible rows create DOM inputs. This fixes both sources of the original Phase 5 regression: oversized JSON and rendering every transaction at once.
 
-The response contains one ETag-consistent snapshot with:
+A 1,001-transaction compatibility benchmark produces 124,467 bytes with the compact shape versus 456,690 bytes with the original Phase 5 verbose shape: 27.3% of the previous payload.
 
-- account and currency metadata;
-- exact party, category, subcategory, and payment-method identifiers;
-- normal transaction fields used by the editor;
-- the real Grisbi bank-reference field, `Ba`;
-- protection flags for records using `Br`, `Trt`, or `Mo`;
-- account totals calculated with `Decimal` and the currency precision;
-- the file ETag that must be supplied to the mutation endpoint.
+## Payment compatibility
 
-The snapshot is produced by the compatibility engine, not the legacy ElementTree reader. The service holds the NCGrisbi application shared lock while reading and verifies that the file ETag is unchanged after Python has built the snapshot.
+Grisbi payment numbers are global identifiers. The `Account` field is a property used by the form to filter choices. Existing files are therefore accepted when a transaction references any globally existing payment number, even if historical data does not match the payment account.
 
-## Create
+For newly created or explicitly changed data, the editor follows Grisbi's form behaviour:
 
-New rows are submitted as `createTransaction` operations. Existing parties, categories, subcategories, and payment methods are sent by ID. A newly typed party/category/subcategory is sent through the Phase 4 name-resolution fields with `createMissing: true`, so all missing records and the transaction are created atomically.
+- the payment belongs to the selected account;
+- a negative amount accepts debit (`Sign=1`) or neutral (`Sign=0`);
+- a positive amount accepts credit (`Sign=2`) or neutral (`Sign=0`);
+- account `Default_debit_method` and `Default_credit_method` are used when available.
 
-The client never allocates a Grisbi transaction ID.
+An unrelated edit, such as changing a note, does not reject a historical payment reference that Grisbi itself can open.
 
-## Update
+## Transfers
 
-Existing rows are converted to `updateTransaction` operations containing only changed fields. Hidden Grisbi metadata is therefore preserved by the Phase 2 partial-update engine.
+Selecting `Transfer` as the category and an account as the destination creates two transactions in one atomic mutation:
 
-Updates can select existing parties/categories/subcategories by name. Creating a new reference while updating an existing transaction is rejected in the editor; the user must first create it with a new transaction. This keeps update planning deterministic until a later server-side update-name resolver is added.
+- source and counterpart use `Ca=0`, `Sca=0`;
+- amounts are exact opposites;
+- each `Trt` points to the other transaction;
+- each side uses a payment method valid for its account and amount direction.
 
-## Delete
+Editing a transfer updates both records. Counterpart-specific value date, marked/reconciled state, and payment content are preserved unless explicitly changed, matching Grisbi's transfer update behaviour. Changing the destination removes the old counterpart and creates a new reciprocal counterpart. Deleting either visible side deletes the pair.
 
-Normal records are submitted as `deleteTransaction`. New unsaved rows are removed locally without producing an operation.
+Same-currency reciprocal transfers are editable. Cross-currency transfers, breakdown mothers (`Br`), split children (`Mo`), and malformed transfer links remain read-only until their exact exchange or breakdown semantics are implemented.
 
-Transactions using any protected relationship field are read-only:
+## Payee completion
 
-- `Br`: breakdown/split relationship;
-- `Trt`: reciprocal transfer relationship;
-- `Mo`: split-child mother relationship.
+The snapshot includes one compact completion hint per payee. Selection prefers the most recent transaction in the current account, then another account, and ignores split children. A payment from another account is mapped by name and sign to a compatible payment in the current account.
 
-Those records cannot be updated or deleted by the normal transaction editor. Transfers and split transactions remain assigned to Phases 6 and 7.
+When an exact payee is selected, the editor fills only fields that are still empty or at their initial zero value: amount, category/subcategory or transfer destination, payment method, note, payment reference, voucher, and bank reference. Existing user input is never overwritten.
 
-## Concurrency
+## Concurrency and security
 
-Every save sends the snapshot ETag as `baseEtag`. On HTTP 409:
+All saves still use the snapshot ETag as `baseEtag`. HTTP 409 preserves the local draft and requires an explicit reload. The snapshot uses the application shared lock; mutation uses the exclusive application lock and one final Nextcloud write. CSRF validation remains enabled, and the Grisbi password reaches Python only through file descriptor 3.
 
-- the local draft is preserved;
-- no automatic retry occurs;
-- saving is blocked;
-- the user must explicitly reload the current file.
+## Protocol operations
 
-After a successful batch, the editor reloads a new server snapshot so generated IDs, newly created references, totals, and ETag all come from the saved file.
+The Phase 5 worker supports normal Phase 4 operations plus:
 
-## Password and CSRF handling
+- `createTransfer`;
+- `updateTransfer`;
+- `deleteTransfer`;
+- `accountSnapshot` version 2.
 
-The Vue client uses `@nextcloud/axios` and `generateUrl`, so Nextcloud's request token is included automatically. The editor snapshot endpoint intentionally does not use `NoCSRFRequired`, because its request body can contain the Grisbi password.
-
-The password continues to travel from PHP to Python only through file descriptor 3.
-
-## Protocol
-
-The framed worker now supports two commands:
-
-- `mutate`: Phase 4 name-aware typed mutations;
-- `accountSnapshot`: read-only JSON snapshot generation.
-
-A handled domain error is returned as a valid protocol frame with process exit status zero. This allows PHP to preserve stable protocol codes rather than replacing them with a generic process failure.
-
-## Phase boundary
-
-Phase 5 supports create, partial update, and delete for normal transactions only. Transfer creation/editing belongs to Phase 6. Split transaction editing belongs to Phase 7. Broader UX, localization, bulk tools, and advanced metadata editors remain later work.
+The frontend never constructs raw Grisbi attributes and never allocates transaction identifiers.
