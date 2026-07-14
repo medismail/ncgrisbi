@@ -29,8 +29,6 @@ def _issue(
 
 
 def _is_positive_integer(value: Optional[str]) -> bool:
-    if value is None:
-        return False
     try:
         return int(value) > 0 and str(int(value)) == value
     except (TypeError, ValueError):
@@ -40,49 +38,60 @@ def _is_positive_integer(value: Optional[str]) -> bool:
 def _collect_unique(
     root: ET.Element,
     tag: str,
-    key_names: Tuple[str, ...],
+    key_name: str,
     issues: List[ValidationIssue],
-) -> Dict[Tuple[str, ...], ET.Element]:
-    records: Dict[Tuple[str, ...], ET.Element] = {}
+) -> Dict[str, ET.Element]:
+    records: Dict[str, ET.Element] = {}
     for element in root.findall(tag):
-        values = tuple(element.get(name) or "" for name in key_names)
-        display_id = "/".join(values)
-        if any(not value for value in values):
+        value = element.get(key_name) or ""
+        if not value:
             _issue(
                 issues,
                 "missing-key",
-                "%s is missing key attribute(s): %s" % (tag, ", ".join(key_names)),
+                "%s is missing key attribute %s" % (tag, key_name),
                 tag,
-                display_id or None,
             )
             continue
-        if values in records:
+        if value in records:
             _issue(
                 issues,
                 "duplicate-id",
-                "Duplicate %s identifier %s" % (tag, display_id),
+                "Duplicate %s identifier %s" % (tag, value),
                 tag,
-                display_id,
+                value,
             )
         else:
-            records[values] = element
+            records[value] = element
     return records
 
 
-def _validate_required_attributes(root: ET.Element, issues: List[ValidationIssue]) -> None:
-    for tag, names in ATTRIBUTE_ORDER.items():
-        for element in root.findall(tag):
-            record_id = element.get("Nb")
-            missing = [name for name in names if name not in element.attrib]
-            if missing:
-                _issue(
-                    issues,
-                    "missing-attributes",
-                    "%s %s is missing attributes: %s"
-                    % (tag, record_id or "?", ", ".join(missing)),
-                    tag,
-                    record_id,
-                )
+def _collect_subcategories(
+    root: ET.Element,
+    issues: List[ValidationIssue],
+) -> Dict[Tuple[str, str], ET.Element]:
+    records: Dict[Tuple[str, str], ET.Element] = {}
+    for element in root.findall("Sub_category"):
+        key = (element.get("Nbc") or "", element.get("Nb") or "")
+        if not all(key):
+            _issue(
+                issues,
+                "missing-key",
+                "Sub_category is missing Nbc or Nb",
+                "Sub_category",
+                "/".join(key),
+            )
+            continue
+        if key in records:
+            _issue(
+                issues,
+                "duplicate-id",
+                "Duplicate Sub_category identifier %s/%s" % key,
+                "Sub_category",
+                key[1],
+            )
+        else:
+            records[key] = element
+    return records
 
 
 def validate_root(
@@ -91,8 +100,7 @@ def validate_root(
 ) -> Tuple[ValidationIssue, ...]:
     issues: List[ValidationIssue] = []
     if root.tag != "Grisbi":
-        _issue(issues, "invalid-root", "The XML root element must be Grisbi")
-        return tuple(issues)
+        return (ValidationIssue("invalid-root", "The XML root element must be Grisbi"),)
 
     generals = root.findall("General")
     if len(generals) != 1:
@@ -110,17 +118,30 @@ def validate_root(
             "General",
         )
 
-    _validate_required_attributes(root, issues)
+    for tag, names in ATTRIBUTE_ORDER.items():
+        for element in root.findall(tag):
+            missing = [name for name in names if name not in element.attrib]
+            if missing:
+                _issue(
+                    issues,
+                    "missing-attributes",
+                    "%s %s is missing attributes: %s"
+                    % (tag, element.get("Nb") or "?", ", ".join(missing)),
+                    tag,
+                    element.get("Nb"),
+                )
 
-    accounts = _collect_unique(root, "Account", ("Number",), issues)
-    currencies = _collect_unique(root, "Currency", ("Nb",), issues)
-    payments = _collect_unique(root, "Payment", ("Account", "Number"), issues)
-    transactions = _collect_unique(root, "Transaction", ("Nb",), issues)
-    parties = _collect_unique(root, "Party", ("Nb",), issues)
-    categories = _collect_unique(root, "Category", ("Nb",), issues)
-    subcategories = _collect_unique(root, "Sub_category", ("Nbc", "Nb"), issues)
+    accounts = _collect_unique(root, "Account", "Number", issues)
+    currencies = _collect_unique(root, "Currency", "Nb", issues)
+    # Grisbi identifies a payment method globally by Number. Account is a
+    # property used by the form to filter choices; it is not part of the key.
+    payments = _collect_unique(root, "Payment", "Number", issues)
+    transactions = _collect_unique(root, "Transaction", "Nb", issues)
+    parties = _collect_unique(root, "Party", "Nb", issues)
+    categories = _collect_unique(root, "Category", "Nb", issues)
+    subcategories = _collect_subcategories(root, issues)
 
-    for (number,), element in accounts.items():
+    for number, element in accounts.items():
         if not _is_positive_integer(number):
             _issue(
                 issues,
@@ -130,7 +151,7 @@ def validate_root(
                 number,
             )
         currency = element.get("Currency") or ""
-        if (currency,) not in currencies:
+        if currency not in currencies:
             _issue(
                 issues,
                 "missing-currency",
@@ -139,7 +160,7 @@ def validate_root(
                 number,
             )
 
-    for (number,), element in currencies.items():
+    for number, element in currencies.items():
         if not _is_positive_integer(number):
             _issue(
                 issues,
@@ -161,15 +182,7 @@ def validate_root(
                 number,
             )
 
-    for (account, number), _element in payments.items():
-        if (account,) not in accounts:
-            _issue(
-                issues,
-                "missing-account",
-                "Payment %s references missing account %s" % (number, account),
-                "Payment",
-                number,
-            )
+    for number, element in payments.items():
         if not _is_positive_integer(number):
             _issue(
                 issues,
@@ -178,8 +191,25 @@ def validate_root(
                 "Payment",
                 number,
             )
+        account = element.get("Account") or ""
+        if account not in accounts:
+            _issue(
+                issues,
+                "missing-account",
+                "Payment %s references missing account %s" % (number, account),
+                "Payment",
+                number,
+            )
+        if element.get("Sign", "0") not in ("0", "1", "2"):
+            _issue(
+                issues,
+                "invalid-payment-sign",
+                "Payment %s has invalid Sign" % number,
+                "Payment",
+                number,
+            )
 
-    for (number,), _element in parties.items():
+    for number in parties:
         if not _is_positive_integer(number):
             _issue(
                 issues,
@@ -189,7 +219,7 @@ def validate_root(
                 number,
             )
 
-    for (number,), element in categories.items():
+    for number, element in categories.items():
         if not _is_positive_integer(number):
             _issue(
                 issues,
@@ -208,7 +238,7 @@ def validate_root(
             )
 
     for (category, number), _element in subcategories.items():
-        if (category,) not in categories:
+        if category not in categories:
             _issue(
                 issues,
                 "missing-category",
@@ -226,8 +256,7 @@ def validate_root(
                 number,
             )
 
-    transaction_by_id = {key[0]: element for key, element in transactions.items()}
-    for (number,), element in transactions.items():
+    for number, element in transactions.items():
         if not _is_positive_integer(number):
             _issue(
                 issues,
@@ -244,7 +273,7 @@ def validate_root(
         subcategory = element.get("Sca") or "0"
         payment = element.get("Pn") or "0"
 
-        if (account,) not in accounts:
+        if account not in accounts:
             _issue(
                 issues,
                 "missing-account",
@@ -252,7 +281,7 @@ def validate_root(
                 "Transaction",
                 number,
             )
-        if (currency,) not in currencies:
+        if currency not in currencies:
             _issue(
                 issues,
                 "missing-currency",
@@ -260,7 +289,7 @@ def validate_root(
                 "Transaction",
                 number,
             )
-        if party not in ("0", "(null)") and (party,) not in parties:
+        if party not in ("0", "(null)") and party not in parties:
             _issue(
                 issues,
                 "missing-party",
@@ -278,7 +307,7 @@ def validate_root(
                     number,
                 )
         else:
-            if (category,) not in categories:
+            if category not in categories:
                 _issue(
                     issues,
                     "missing-category",
@@ -299,15 +328,15 @@ def validate_root(
                     "Transaction",
                     number,
                 )
-        if payment not in ("0", "(null)") and (
-            account,
-            payment,
-        ) not in payments:
+
+        # Compatibility rule: opening an existing Grisbi file requires only that
+        # Pn exists globally. Account/sign suitability is enforced when a user
+        # creates or explicitly changes the transaction/payment selection.
+        if payment not in ("0", "(null)") and payment not in payments:
             _issue(
                 issues,
                 "missing-payment",
-                "Transaction %s references payment %s outside account %s"
-                % (number, payment, account),
+                "Transaction %s references missing payment %s" % (number, payment),
                 "Transaction",
                 number,
             )
@@ -327,7 +356,7 @@ def validate_root(
 
         transfer = element.get("Trt", "0")
         if transfer not in ("0", "(null)"):
-            target = transaction_by_id.get(transfer)
+            target = transactions.get(transfer)
             if target is None:
                 _issue(
                     issues,
@@ -347,7 +376,7 @@ def validate_root(
                 )
 
         mother = element.get("Mo", "0")
-        if mother not in ("0", "(null)") and mother not in transaction_by_id:
+        if mother not in ("0", "(null)") and mother not in transactions:
             _issue(
                 issues,
                 "missing-split-mother",
