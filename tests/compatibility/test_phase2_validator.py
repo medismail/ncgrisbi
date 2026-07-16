@@ -18,7 +18,7 @@ FIXTURE = (
     / "tests"
     / "compatibility"
     / "fixtures"
-    / "grisbi-1.2.2-basic.gsb"
+    / "grisbi-1.2.2-real.gsb"
 )
 
 
