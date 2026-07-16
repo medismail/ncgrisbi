@@ -4,8 +4,9 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .errors import MutationError, RecordNotFoundError
+from .validator import warning_issues
 
-_NULL_VALUES = (None, "(null)")
+_NULL_VALUES = (None, "(null)", "(NULL)")
 
 # Transaction flag bits used by the compact wire format.
 TX_BREAKDOWN = 1
@@ -17,6 +18,13 @@ TX_CROSS_CURRENCY = 16
 
 def _nullable(value: Optional[str]) -> Optional[str]:
     return None if value in _NULL_VALUES else value
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _canonical_positive_id(value: Any, field: str) -> str:
@@ -99,14 +107,16 @@ def _mapped_payment_id(
 
 
 def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
-    """Build a compact, lossless editor snapshot.
+    """Build the compact Phase 6 account snapshot.
 
-    The wire format intentionally uses short keys and positional arrays. The
-    browser reconstructs descriptive objects. Names are therefore not repeated
-    in every transaction row, which materially reduces large-account payloads.
+    The optional ``U`` array carries Grisbi's saved transaction-view preferences.
+    The UI may honour these in the responsive phase without expanding every row.
+    ``W`` contains non-fatal compatibility warnings, such as damaged transfer
+    links; affected transactions remain visible but read-only.
     """
     account_id = _canonical_positive_id(account_id, "accountId")
     root = document.root
+    general = root.find("General")
 
     account_elements = list(root.findall("Account"))
     accounts_by_id = _index_by_attribute(account_elements, "Number")
@@ -122,10 +132,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
             "Account %s references missing currency %s"
             % (account_id, currency_id)
         )
-    try:
-        precision = int(currency.get("Fl", "2"))
-    except ValueError:
-        raise MutationError("Currency %s has invalid precision" % currency_id)
+    precision = _safe_int(currency.get("Fl", "2"), 2)
     if precision < 0 or precision > 12:
         raise MutationError(
             "Currency %s has unsupported precision" % currency_id
@@ -157,15 +164,11 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
         key=lambda value: _numeric_key(value.get("Nb") or ""),
     ):
         number = element.get("Nb") or ""
-        try:
-            kind = int(element.get("Kd", "0"))
-        except ValueError:
-            kind = 0
         categories.append(
             [
                 number,
                 element.get("Na") or "",
-                kind,
+                _safe_int(element.get("Kd", "0")),
                 subcategories_by_category.get(number, []),
             ]
         )
@@ -195,9 +198,9 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
                     [
                         element.get("Number") or "",
                         element.get("Name") or "",
-                        int(element.get("Sign", "0") or 0),
-                        int(element.get("Show_entry", "0") or 0),
-                        int(element.get("Automatic_number", "0") or 0),
+                        _safe_int(element.get("Sign", "0")),
+                        _safe_int(element.get("Show_entry", "0")),
+                        _safe_int(element.get("Automatic_number", "0")),
                         _nullable(element.get("Current_number")),
                     ]
                     for element in values
@@ -214,17 +217,16 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
             [
                 element.get("Number") or "",
                 element.get("Name") or "",
-                int(element.get("Kind", "0") or 0),
+                _safe_int(element.get("Kind", "0")),
                 element.get("Currency") or "",
                 element.get("Default_debit_method") or "0",
                 element.get("Default_credit_method") or "0",
-                int(element.get("Closed_account", "0") or 0),
+                _safe_int(element.get("Closed_account", "0")),
             ]
         )
 
     transaction_elements = list(root.findall("Transaction"))
     transactions_by_id = _index_by_attribute(transaction_elements, "Nb")
-
     total = Decimal("0")
     marked_total = Decimal("0")
     transactions: List[List[Any]] = []
@@ -275,7 +277,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
                 attributes.get("Pn", "0"),
                 _nullable(attributes.get("No")),
                 _nullable(attributes.get("Pc")),
-                int(attributes.get("Ma", "0") or 0),
+                _safe_int(attributes.get("Ma", "0")),
                 _nullable(attributes.get("Vo")),
                 _nullable(attributes.get("Ba")),
                 attributes.get("Br", "0"),
@@ -308,9 +310,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
         set(current_history) | set(other_history),
         key=_numeric_key,
     ):
-        element = current_history.get(party_id)
-        if element is None:
-            element = other_history.get(party_id)
+        element = current_history.get(party_id) or other_history.get(party_id)
         if element is None:
             continue
         amount = _decimal(element.get("Am"), "Completion amount")
@@ -346,12 +346,25 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
             ]
         )
 
+    preferences = [
+        max(1, min(3, _safe_int(account.get("Lines_per_transaction", "1"), 1))),
+        _safe_int(general.get("Two_lines_showed", "0") if general is not None else 0),
+        _safe_int(general.get("Three_lines_showed", "0") if general is not None else 0),
+        general.get("Transactions_view", "") if general is not None else "",
+        general.get("Transaction_column_width", "") if general is not None else "",
+        account.get("Sorting_kind_column") or "",
+    ]
+    warnings = [
+        [issue.code, issue.message, issue.tag, issue.record_id]
+        for issue in warning_issues(document)
+    ]
+
     return {
         "v": 2,
         "a": [
             account_id,
             account.get("Name") or "",
-            int(account.get("Kind", "0") or 0),
+            _safe_int(account.get("Kind", "0")),
             currency_id,
             currency.get("Na") or "",
             currency.get("Ico") or "",
@@ -366,4 +379,6 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
         "M": payment_groups,
         "T": transactions,
         "H": histories,
+        "U": preferences,
+        "W": warnings,
     }
