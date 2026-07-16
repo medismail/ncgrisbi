@@ -47,7 +47,15 @@
                 <span v-else>—</span>
               </span>
               <span><input v-model="row.note" :disabled="!isEditable(row)"></span>
-              <span><input type="checkbox" :checked="Number(row.marked) === 1" :disabled="!isEditable(row)" @change="row.marked = $event.target.checked ? 1 : 0"></span>
+              <span>
+                <input
+                  type="checkbox"
+                  :checked="Number(row.marked) === 1"
+                  :disabled="saving || conflict || row.deleted || (!row.isNew && !row.quickMarkable)"
+                  :title="markTitle(row)"
+                  @change="quickMarkChanged(row, $event)"
+                >
+              </span>
               <span><input v-model="row.bankReference" :disabled="!isEditable(row)"></span>
               <span class="status"><span v-if="row.deleted">Pending deletion</span><span v-else-if="row.protected">Read-only: {{ row.protectionReasons.join(', ') }}</span><span v-else-if="row.isTransfer">Transfer</span><span v-else-if="row.isNew">New</span><span v-else-if="row.editing">Editing</span><span v-else>Saved</span></span>
               <span class="actions">
@@ -74,8 +82,9 @@ import { useStore } from 'vuex'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import {
-  TRANSFER_CATEGORY, applyPartyCompletion, buildMutationOperations, calculateTotals, createDrafts,
-  hasPendingChanges, newTransactionDraft, normalizeName, onAmountDirectionChanged, paymentMethodsForAmount,
+  TRANSFER_CATEGORY, allowReconciledMutations, applyPartyCompletion, buildMutationOperations,
+  calculateTotals, createDrafts, hasPendingChanges, newTransactionDraft, normalizeName,
+  onAmountDirectionChanged, paymentMethodsForAmount,
 } from '@/domain/transactionEditor.mjs'
 import { apiError, fetchEditorSnapshot, mutateDocument } from '@/services/gsbApi'
 
@@ -91,7 +100,10 @@ async function loadSnapshot() {
   loading.value = true; conflict.value = false
   try {
     const response = await fetchEditorSnapshot({ accountId: selectedAccountId.value, filePath: store.state.filePath, filePassword: store.state.filePassword })
-    snapshot.value = response.snapshot; etag.value = response.document.etag; rows.value = createDrafts(response.snapshot); setMessage('')
+    snapshot.value = response.snapshot; etag.value = response.document.etag; rows.value = createDrafts(response.snapshot)
+    if (response.snapshot.warnings?.length) {
+      setMessage(`Opened with ${response.snapshot.warnings.length} Grisbi compatibility warning(s). Affected rows are read-only.`, 'warning')
+    } else setMessage('')
   } catch (error) { const failure = apiError(error); setMessage(failure.message, 'error') } finally { loading.value = false }
 }
 function isEditable(row) { return !row.deleted && !row.protected && row.editing }
@@ -112,18 +124,40 @@ function completeParty(row) { if (row.isNew) applyPartyCompletion(row, snapshot.
 function amountChanged(row) { onAmountDirectionChanged(row, snapshot.value) }
 function categoryChanged(row) { row.subcategoryName = ''; row.transferPaymentMethodName = '' }
 function destinationChanged(row) { if (isTransferRow(row)) onAmountDirectionChanged(row, snapshot.value) }
+function quickMarkChanged(row, event) { row.marked = event.target.checked ? 1 : 0 }
+function markTitle(row) {
+  if (row.isNew || row.quickMarkable) return 'Check or uncheck this transaction without opening the editor.'
+  if (Number(row.marked) === 2) return 'Telepointed transactions require the dedicated reconciliation workflow.'
+  if (Number(row.marked) === 3) return 'Reconciled transactions require the dedicated reconciliation workflow.'
+  return 'This marked state cannot be changed here.'
+}
+async function submitOperations(operations, confirmed = false) {
+  try {
+    const response = await mutateDocument({ filePath: store.state.filePath, filePassword: store.state.filePassword, baseEtag: etag.value, operations })
+    etag.value = response.document.etag; setMessage('Transactions saved successfully.', 'success'); await loadSnapshot()
+    return true
+  } catch (error) {
+    const failure = apiError(error)
+    if (failure.code === 'confirmation-required' && !confirmed) {
+      const ids = failure.details?.transactionIds ?? []
+      const suffix = ids.length ? ` Transactions: ${ids.join(', ')}.` : ''
+      if (window.confirm(`This change affects reconciled transfer data.${suffix} Continue?`)) {
+        return submitOperations(allowReconciledMutations(operations), true)
+      }
+      setMessage('The reconciled transfer was not changed.', 'warning')
+      return false
+    }
+    conflict.value = failure.code === 'etag-conflict'
+    setMessage(conflict.value ? 'The GSB file changed elsewhere. Your draft is preserved; reload before saving again.' : failure.message, 'error')
+    return false
+  }
+}
 async function saveChanges() {
   let operations
   try { operations = buildMutationOperations(rows.value, snapshot.value) } catch (error) { setMessage(error.message, 'error'); return }
   if (!operations.length) { setMessage('There are no validated changes to save.'); return }
   saving.value = true
-  try {
-    const response = await mutateDocument({ filePath: store.state.filePath, filePassword: store.state.filePassword, baseEtag: etag.value, operations })
-    etag.value = response.document.etag; setMessage('Transactions saved successfully.', 'success'); await loadSnapshot()
-  } catch (error) {
-    const failure = apiError(error); conflict.value = failure.code === 'etag-conflict'
-    setMessage(conflict.value ? 'The GSB file changed elsewhere. Your draft is preserved; reload before saving again.' : failure.message, 'error')
-  } finally { saving.value = false }
+  try { await submitOperations(operations) } finally { saving.value = false }
 }
 async function reloadSnapshot() { if (pendingChanges.value && !window.confirm('Discard all unsaved transaction changes?')) return; await loadSnapshot() }
 async function reloadAfterConflict() { if (!window.confirm('Reload the current file and discard this local draft?')) return; await loadSnapshot() }
@@ -140,7 +174,7 @@ watch(() => route.params.id, async newId => {
 .loading { display: flex; gap: 12px; align-items: center; justify-content: center; min-height: 240px; }
 .account-header { display: flex; justify-content: space-between; gap: 24px; }
 .account-header h2 { margin-bottom: 4px; }.account-header p { opacity: .7; }.totals { display: flex; flex-direction: column; text-align: right; }
-.toolbar { display: flex; gap: 8px; margin: 16px 0; }.message { margin-bottom: 12px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); }.message.error { border-color: var(--color-error); }.message.success { border-color: var(--color-success); }
+.toolbar { display: flex; gap: 8px; margin: 16px 0; }.message { margin-bottom: 12px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); }.message.error { border-color: var(--color-error); }.message.warning { border-color: var(--color-warning); }.message.success { border-color: var(--color-success); }
 .grid-scroll { overflow-x: auto; }.grid-row { display: grid; grid-template-columns: 60px 110px 110px 170px 150px 190px 145px 145px 180px 65px 145px 150px 140px; gap: 4px; align-items: center; min-width: 1900px; padding: 4px; box-sizing: border-box; }
 .header { font-weight: bold; background: var(--color-background-dark); border-bottom: 1px solid var(--color-border); }.scroller { height: 62vh; min-width: 1900px; }.body { border-bottom: 1px solid var(--color-border); }.body:nth-child(even) { background: var(--color-background-darker); }.body input:not([type='checkbox']) { width: 100%; box-sizing: border-box; }.deleted { opacity: .55; text-decoration: line-through; }.protected { background: var(--color-background-dark); }.status { font-size: .9em; }.actions { white-space: nowrap; }.actions button { margin-right: 4px; }
 </style>
