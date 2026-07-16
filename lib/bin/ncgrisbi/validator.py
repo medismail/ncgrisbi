@@ -16,6 +16,7 @@ class ValidationIssue:
     message: str
     tag: Optional[str] = None
     record_id: Optional[str] = None
+    severity: str = "error"
 
 
 def _issue(
@@ -24,8 +25,9 @@ def _issue(
     message: str,
     tag: Optional[str] = None,
     record_id: Optional[str] = None,
+    severity: str = "error",
 ) -> None:
-    issues.append(ValidationIssue(code, message, tag, record_id))
+    issues.append(ValidationIssue(code, message, tag, record_id, severity))
 
 
 def _is_positive_integer(value: Optional[str]) -> bool:
@@ -365,6 +367,7 @@ def validate_root(
                     % (number, transfer),
                     "Transaction",
                     number,
+                    severity="warning",
                 )
             elif target.get("Trt", "0") != number:
                 _issue(
@@ -373,6 +376,7 @@ def validate_root(
                     "Transaction %s transfer link is not reciprocal" % number,
                     "Transaction",
                     number,
+                    severity="warning",
                 )
 
         mother = element.get("Mo", "0")
@@ -393,7 +397,21 @@ def validate_document(document: GsbDocument) -> Tuple[ValidationIssue, ...]:
     return validate_root(document.root, expected_file_version=document.file_version)
 
 
+def fatal_issues(document: GsbDocument) -> Tuple[ValidationIssue, ...]:
+    return tuple(
+        issue for issue in validate_document(document)
+        if issue.severity != "warning"
+    )
+
+
+def warning_issues(document: GsbDocument) -> Tuple[ValidationIssue, ...]:
+    return tuple(
+        issue for issue in validate_document(document)
+        if issue.severity == "warning"
+    )
+
+
 def assert_valid_document(document: GsbDocument) -> None:
-    issues = validate_document(document)
+    issues = fatal_issues(document)
     if issues:
         raise ValidationError(issues)
