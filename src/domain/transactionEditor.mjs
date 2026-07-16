@@ -114,6 +114,7 @@ export function draftFromTransaction(transaction) {
     editing: false,
     protected: Boolean(transaction.protected),
     protectionReasons: [...(transaction.protectionReasons ?? [])],
+    quickMarkable: transaction.quickMarkable !== false,
     isTransfer: Boolean(transaction.isTransfer),
     ...values,
     original: {
@@ -139,6 +140,7 @@ export function newTransactionDraft(snapshot, key, date) {
     editing: true,
     protected: false,
     protectionReasons: [],
+    quickMarkable: true,
     isTransfer: false,
     date,
     valueDate: '',
@@ -161,6 +163,32 @@ export function createDrafts(snapshot) {
   return snapshot.transactions.map(item => draftFromTransaction(item))
 }
 
+const COMMON_FIELDS = [
+  'date',
+  'valueDate',
+  'amount',
+  'partyName',
+  'paymentMethodName',
+  'note',
+  'paymentReference',
+  'voucher',
+  'bankReference',
+]
+
+function sameFields(row, original, fields) {
+  return fields.every(field => String(row[field] ?? '') === String(original?.[field] ?? ''))
+}
+
+function sameNonMarkedValues(row, original = row.original) {
+  if (!original) return false
+  return sameFields(row, original, [
+    ...COMMON_FIELDS,
+    'categoryName',
+    'subcategoryName',
+    'transferPaymentMethodName',
+  ])
+}
+
 function scalarChanges(row) {
   const changes = {}
   const mappings = [
@@ -177,12 +205,21 @@ function scalarChanges(row) {
     const original = convert(row.original[draftField])
     if (current !== original) changes[apiField] = current
   }
-  const marked = Number(row.marked)
-  if (![0, 1, 2, 3].includes(marked)) {
-    throw new EditorValidationError('Marked state must be between 0 and 3.', row.key)
-  }
-  if (marked !== Number(row.original.marked)) changes.marked = marked
   return changes
+}
+
+function validateMarked(value, rowKey, quick = false) {
+  const marked = Number(value)
+  const allowed = quick ? [0, 1] : [0, 1, 2, 3]
+  if (!allowed.includes(marked)) {
+    throw new EditorValidationError(
+      quick
+        ? 'Only unchecked and checked transactions can be changed directly.'
+        : 'Marked state must be between 0 and 3.',
+      rowKey,
+    )
+  }
+  return marked
 }
 
 function partyReference(operation, snapshot, row, allowCreate) {
@@ -262,10 +299,7 @@ function commonCreate(row, snapshot) {
     accountId: String(snapshot.account.id),
     date: requiredText(row.date, 'Date', row.key),
     amount: decimalText(row.amount, row.key),
-    marked: Number(row.marked),
-  }
-  if (![0, 1, 2, 3].includes(operation.marked)) {
-    throw new EditorValidationError('Marked state must be between 0 and 3.', row.key)
+    marked: validateMarked(row.marked, row.key),
   }
   for (const [field, apiField] of [
     ['valueDate', 'valueDate'],
@@ -349,12 +383,6 @@ function normalUpdateOperation(row, snapshot) {
 }
 
 function transferUpdateOperation(row, snapshot) {
-  if (normalizeName(row.categoryName) !== normalizeName(TRANSFER_CATEGORY)) {
-    throw new EditorValidationError(
-      'Converting an existing transfer to a normal transaction is not supported yet.',
-      row.key,
-    )
-  }
   const changes = scalarChanges(row)
   const partyName = optionalText(row.partyName)
   const party = partyName === null ? null : partyForName(snapshot, partyName, row.key)
@@ -371,14 +399,10 @@ function transferUpdateOperation(row, snapshot) {
     row.amount,
     row.key,
   )
-  if (sourcePayment !== row.original.paymentMethodId) {
-    changes.paymentMethodId = sourcePayment
-  }
+  if (sourcePayment !== row.original.paymentMethodId) changes.paymentMethodId = sourcePayment
 
   const target = accountForName(snapshot, row.subcategoryName, row.key)
-  if (!target) {
-    throw new EditorValidationError('Select a destination account for the transfer.', row.key)
-  }
+  if (!target) throw new EditorValidationError('Select a destination account for the transfer.', row.key)
   if (String(target.id) !== String(row.original.transferAccountId)) {
     changes.targetAccountId = String(target.id)
   }
@@ -389,10 +413,7 @@ function transferUpdateOperation(row, snapshot) {
     String(-Number(row.amount)),
     row.key,
   )
-  if (
-    targetPayment !== row.original.transferPaymentMethodId
-    || changes.targetAccountId
-  ) {
+  if (targetPayment !== row.original.transferPaymentMethodId || changes.targetAccountId) {
     changes.targetPaymentMethodId = targetPayment
   }
   if (!Object.keys(changes).length) return null
@@ -403,16 +424,62 @@ function transferUpdateOperation(row, snapshot) {
   }
 }
 
+function normalToTransferOperation(row, snapshot) {
+  if (!sameFields(row, row.original, COMMON_FIELDS)) {
+    throw new EditorValidationError(
+      'Save other field changes before converting this transaction to a transfer.',
+      row.key,
+    )
+  }
+  const target = accountForName(snapshot, row.subcategoryName, row.key)
+  if (!target) throw new EditorValidationError('Select a destination account for the transfer.', row.key)
+  return {
+    type: 'convertTransactionToTransfer',
+    transactionId: row.transactionId,
+    targetAccountId: String(target.id),
+    paymentMethodId: paymentId(
+      snapshot,
+      snapshot.account.id,
+      row.paymentMethodName,
+      row.amount,
+      row.key,
+    ),
+    targetPaymentMethodId: paymentId(
+      snapshot,
+      target.id,
+      row.transferPaymentMethodName,
+      String(-Number(row.amount)),
+      row.key,
+    ),
+  }
+}
+
+function transferToNormalOperation(row, snapshot) {
+  if (!sameFields(row, row.original, COMMON_FIELDS)) {
+    throw new EditorValidationError(
+      'Save other field changes before converting this transfer to a normal transaction.',
+      row.key,
+    )
+  }
+  const references = {}
+  normalCategoryReference(references, snapshot, row, false)
+  return {
+    type: 'convertTransferToTransaction',
+    transactionId: row.transactionId,
+    categoryId: String(references.categoryId ?? '0'),
+    subcategoryId: String(references.subcategoryId ?? '0'),
+  }
+}
+
 export function buildMutationOperations(rows, snapshot) {
   const operations = []
+  const marks = []
+
   for (const row of rows) {
     if (row.deleted) {
       if (row.isNew) continue
       if (row.protected) {
-        throw new EditorValidationError(
-          'This protected transaction cannot be deleted here.',
-          row.key,
-        )
+        throw new EditorValidationError('This protected transaction cannot be deleted here.', row.key)
       }
       operations.push({
         type: row.isTransfer ? 'deleteTransfer' : 'deleteTransaction',
@@ -420,8 +487,19 @@ export function buildMutationOperations(rows, snapshot) {
       })
       continue
     }
+
+    if (!row.isNew && Number(row.marked) !== Number(row.original.marked)) {
+      if (!row.quickMarkable) {
+        throw new EditorValidationError(
+          'Telepointed or reconciled transactions cannot be changed with the quick checkbox.',
+          row.key,
+        )
+      }
+      marks.push([row.transactionId, validateMarked(row.marked, row.key, true)])
+    }
+
     if (row.protected) {
-      if (!sameEditableValues(row, row.original)) {
+      if (!sameNonMarkedValues(row, row.original)) {
         throw new EditorValidationError(
           'This transaction is read-only because its Grisbi structure is not safely editable.',
           row.key,
@@ -429,16 +507,44 @@ export function buildMutationOperations(rows, snapshot) {
       }
       continue
     }
+
     if (row.isNew) {
       operations.push(createOperation(row, snapshot))
-    } else {
-      const operation = row.isTransfer
-        ? transferUpdateOperation(row, snapshot)
-        : normalUpdateOperation(row, snapshot)
-      if (operation) operations.push(operation)
+      continue
     }
+
+    const currentlyTransfer = normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)
+    let operation = null
+    if (!row.original.isTransfer && currentlyTransfer) {
+      operation = normalToTransferOperation(row, snapshot)
+    } else if (row.original.isTransfer && !currentlyTransfer) {
+      operation = transferToNormalOperation(row, snapshot)
+    } else if (row.original.isTransfer) {
+      operation = transferUpdateOperation(row, snapshot)
+    } else {
+      operation = normalUpdateOperation(row, snapshot)
+    }
+    if (operation) operations.push(operation)
+  }
+
+  if (marks.length) {
+    operations.push({ type: 'setTransactionMarks', marks })
   }
   return operations
+}
+
+export function allowReconciledMutations(operations) {
+  return operations.map(operation => {
+    if ([
+      'updateTransfer',
+      'deleteTransfer',
+      'convertTransactionToTransfer',
+      'convertTransferToTransaction',
+    ].includes(operation.type)) {
+      return { ...operation, allowReconciled: true }
+    }
+    return operation
+  })
 }
 
 export function applyPartyCompletion(row, snapshot) {
@@ -455,34 +561,24 @@ export function applyPartyCompletion(row, snapshot) {
   }
   if (empty('categoryName')) {
     if (hint.transferAccountId) {
-      const target = snapshot.accounts.find(
-        item => String(item.id) === String(hint.transferAccountId),
-      )
+      const target = snapshot.accounts.find(item => String(item.id) === String(hint.transferAccountId))
       if (target) {
         row.categoryName = TRANSFER_CATEGORY
         row.subcategoryName = target.name
         changed = true
       }
     } else {
-      const category = snapshot.categories.find(
-        item => String(item.id) === String(hint.categoryId),
-      )
+      const category = snapshot.categories.find(item => String(item.id) === String(hint.categoryId))
       if (category) {
         row.categoryName = category.name
-        const subcategory = category.subcategories.find(
-          item => String(item.id) === String(hint.subcategoryId),
-        )
-        if (subcategory && empty('subcategoryName')) {
-          row.subcategoryName = subcategory.name
-        }
+        const subcategory = category.subcategories.find(item => String(item.id) === String(hint.subcategoryId))
+        if (subcategory && empty('subcategoryName')) row.subcategoryName = subcategory.name
         changed = true
       }
     }
   }
   if (empty('paymentMethodName') && hint.paymentMethodId !== '0') {
-    const method = snapshot.paymentMethods.find(
-      item => String(item.id) === String(hint.paymentMethodId),
-    )
+    const method = snapshot.paymentMethods.find(item => String(item.id) === String(hint.paymentMethodId))
     if (method) {
       row.paymentMethodName = method.name
       changed = true
@@ -499,14 +595,9 @@ export function applyPartyCompletion(row, snapshot) {
       changed = true
     }
   }
-  if (
-    normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)
-    && empty('transferPaymentMethodName')
-  ) {
+  if (normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY) && empty('transferPaymentMethodName')) {
     const target = accountForName(snapshot, row.subcategoryName, row.key)
-    const method = target
-      ? accountDefaultPayment(snapshot, target.id, String(-Number(row.amount)))
-      : null
+    const method = target ? accountDefaultPayment(snapshot, target.id, String(-Number(row.amount))) : null
     if (method) {
       row.transferPaymentMethodName = method.name
       changed = true
@@ -516,22 +607,10 @@ export function applyPartyCompletion(row, snapshot) {
 }
 
 export function onAmountDirectionChanged(row, snapshot) {
-  const current = paymentForName(
-    snapshot.paymentMethods,
-    row.paymentMethodName,
-    row.key,
-  )
-  const allowed = paymentMethodsForAmount(
-    snapshot,
-    snapshot.account.id,
-    row.amount,
-  )
+  const current = paymentForName(snapshot.paymentMethods, row.paymentMethodName, row.key)
+  const allowed = paymentMethodsForAmount(snapshot, snapshot.account.id, row.amount)
   if (!current || !allowed.some(item => item.id === current.id)) {
-    row.paymentMethodName = accountDefaultPayment(
-      snapshot,
-      snapshot.account.id,
-      row.amount,
-    )?.name ?? ''
+    row.paymentMethodName = accountDefaultPayment(snapshot, snapshot.account.id, row.amount)?.name ?? ''
   }
   if (normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)) {
     const target = accountForName(snapshot, row.subcategoryName, row.key)
@@ -547,24 +626,8 @@ export function onAmountDirectionChanged(row, snapshot) {
 
 export function sameEditableValues(row, original = row.original) {
   if (!original) return false
-  const fields = [
-    'date',
-    'valueDate',
-    'amount',
-    'partyName',
-    'categoryName',
-    'subcategoryName',
-    'paymentMethodName',
-    'transferPaymentMethodName',
-    'note',
-    'paymentReference',
-    'marked',
-    'voucher',
-    'bankReference',
-  ]
-  return fields.every(
-    field => String(row[field] ?? '') === String(original[field] ?? ''),
-  )
+  return sameNonMarkedValues(row, original)
+    && Number(row.marked) === Number(original.marked)
 }
 
 export function hasPendingChanges(rows) {
