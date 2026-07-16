@@ -12,7 +12,7 @@ from ncgrisbi.phase5_protocol import execute_request
 from ncgrisbi.protocol import PROTOCOL_VERSION
 from ncgrisbi.snapshot import TX_TRANSFER, build_account_snapshot
 
-FIXTURE = ROOT / "tests" / "compatibility" / "fixtures" / "grisbi-1.2.2-basic.gsb"
+FIXTURE = ROOT / "tests" / "compatibility" / "fixtures" / "grisbi-1.2.2-real.gsb"
 
 
 def test_compact_snapshot_uses_real_grisbi_ids_and_preferences() -> None:
