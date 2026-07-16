@@ -114,6 +114,7 @@ export function decodeCompactSnapshot(wire) {
     const targetPaymentMethodId = item[TX.targetPaymentMethodId] == null
       ? '0'
       : String(item[TX.targetPaymentMethodId])
+    const marked = Number(item[TX.marked] ?? 0)
 
     const protectionReasons = []
     if (breakdown) protectionReasons.push('breakdown')
@@ -137,7 +138,8 @@ export function decodeCompactSnapshot(wire) {
       paymentMethodName: paymentsById.get(paymentMethodId)?.name ?? null,
       note: item[TX.note] ?? null,
       paymentReference: item[TX.paymentReference] ?? null,
-      marked: Number(item[TX.marked] ?? 0),
+      marked,
+      quickMarkable: marked === 0 || marked === 1,
       voucher: item[TX.voucher] ?? null,
       bankReference: item[TX.bankReference] ?? null,
       breakdown: String(item[TX.breakdown] ?? '0'),
@@ -176,6 +178,23 @@ export function decodeCompactSnapshot(wire) {
     }
   }
 
+  const preferencesWire = wire.U ?? []
+  const preferences = {
+    linesPerTransaction: Number(preferencesWire[0] ?? 1),
+    twoLinesShowed: Number(preferencesWire[1] ?? 0) !== 0,
+    threeLinesShowed: Number(preferencesWire[2] ?? 0) !== 0,
+    transactionsView: preferencesWire[3] ?? '',
+    transactionColumnWidth: preferencesWire[4] ?? '',
+    sortingKindColumn: preferencesWire[5] ?? '',
+  }
+  const warnings = (wire.W ?? []).map(item => ({
+    code: item[0] ?? 'compatibility-warning',
+    message: item[1] ?? '',
+    tag: item[2] ?? null,
+    recordId: item[3] == null ? null : String(item[3]),
+    severity: 'warning',
+  }))
+
   return {
     wireVersion: 2,
     account,
@@ -186,5 +205,7 @@ export function decodeCompactSnapshot(wire) {
     paymentMethodsByAccount,
     transactions,
     completionByPartyId,
+    preferences,
+    warnings,
   }
 }
