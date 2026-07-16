@@ -5,21 +5,20 @@ import json
 import sys
 from typing import Any, Dict, Mapping, Optional, Tuple
 
-from .compat_engine import apply_compat_operations
+from .errors import ConfirmationRequiredError, MarkStateError
 from .parser import parse_document
+from .phase6_engine import apply_phase6_operations
 from .protocol import (
     MAX_OPERATIONS,
     PROTOCOL_VERSION,
     ProtocolError,
-    decode_operation,
     encode_frame,
     error_response as base_error_response,
     read_frame,
     read_password_fd,
 )
-from .resolution import NameResolutionError, plan_operations
+from .resolution import NameResolutionError
 from .snapshot import build_account_snapshot
-from .transfers import apply_transfer
 from .validator import assert_valid_document
 
 
@@ -27,6 +26,12 @@ def error_response(exc: Exception, request_id: Any = None) -> Dict[str, Any]:
     response = base_error_response(exc, request_id=request_id)
     if isinstance(exc, NameResolutionError):
         response["error"]["code"] = "name-resolution-error"
+    elif isinstance(exc, ConfirmationRequiredError):
+        response["error"]["code"] = "confirmation-required"
+        response["error"]["reason"] = exc.reason
+        response["error"]["transactionIds"] = list(exc.transaction_ids)
+    elif isinstance(exc, MarkStateError):
+        response["error"]["code"] = "marked-state-protected"
     return response
 
 
@@ -51,59 +56,10 @@ def _raw_operations(header: Mapping[str, Any]) -> list:
         raise ProtocolError("operations cannot be empty")
     if len(operations) > MAX_OPERATIONS:
         raise ProtocolError("Mutation batch exceeds the operation limit")
+    for operation in operations:
+        if not isinstance(operation, Mapping):
+            raise ProtocolError("Every mutation operation must be a JSON object")
     return operations
-
-
-def _normal_operation(
-    document: Any,
-    raw: Mapping[str, Any],
-    operation_index: int,
-    password: Optional[str],
-):
-    plan = plan_operations(document, [raw], decode_operation)
-    result = apply_compat_operations(
-        document,
-        plan.operations,
-        password=password,
-    )
-    outcomes = []
-    for expanded_index, (outcome, planned) in enumerate(
-        zip(result.outcomes, plan.mutations)
-    ):
-        outcomes.append(
-            {
-                "operationIndex": operation_index,
-                "expandedOperationIndex": expanded_index,
-                "operation": outcome.operation,
-                "recordType": outcome.record_type,
-                "recordId": outcome.record_id,
-                "role": planned.role,
-                "autoCreated": planned.auto_created,
-            }
-        )
-    return result.raw_bytes, outcomes
-
-
-def _transfer_operation(
-    document: Any,
-    raw: Mapping[str, Any],
-    operation_index: int,
-    password: Optional[str],
-):
-    result = apply_transfer(document, raw, password=password)
-    outcomes = [
-        {
-            "operationIndex": operation_index,
-            "expandedOperationIndex": expanded_index,
-            "operation": outcome.operation,
-            "recordType": outcome.record_type,
-            "recordId": outcome.record_id,
-            "role": outcome.role,
-            "autoCreated": outcome.role == "party",
-        }
-        for expanded_index, outcome in enumerate(result.outcomes)
-    ]
-    return result.raw_bytes, outcomes
 
 
 def execute_request(
@@ -139,47 +95,30 @@ def execute_request(
     if command != "mutate":
         raise ProtocolError("Unsupported protocol command")
 
-    current = payload
-    all_outcomes = []
-    for operation_index, raw in enumerate(_raw_operations(header)):
-        if not isinstance(raw, Mapping):
-            raise ProtocolError(
-                "Every mutation operation must be a JSON object"
-            )
-        document = parse_document(current, password=password)
-        if raw.get("type") in (
-            "createTransfer",
-            "updateTransfer",
-            "deleteTransfer",
-        ):
-            current, outcomes = _transfer_operation(
-                document,
-                raw,
-                operation_index,
-                password,
-            )
-        else:
-            current, outcomes = _normal_operation(
-                document,
-                raw,
-                operation_index,
-                password,
-            )
-        base_index = len(all_outcomes)
-        for offset, outcome in enumerate(outcomes):
-            outcome["expandedOperationIndex"] = base_index + offset
-        all_outcomes.extend(outcomes)
+    result = apply_phase6_operations(
+        payload,
+        _raw_operations(header),
+        password=password,
+    )
+    outcomes = []
+    for expanded_index, outcome in enumerate(result.outcomes):
+        mapped = dict(outcome)
+        mapped["expandedOperationIndex"] = expanded_index
+        outcomes.append(mapped)
 
+    output = result.raw_bytes
     return (
         {
             "version": PROTOCOL_VERSION,
             "ok": True,
             "requestId": header.get("requestId"),
-            "changed": current != payload,
-            "sha256": hashlib.sha256(current).hexdigest(),
-            "outcomes": all_outcomes,
+            "changed": output != payload,
+            "sha256": hashlib.sha256(output).hexdigest(),
+            "outcomes": outcomes,
+            "warnings": list(result.warnings),
+            "changedRecords": result.changed_records,
         },
-        current,
+        output,
     )
 
 
