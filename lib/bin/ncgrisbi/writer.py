@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import List, Mapping, Optional, Tuple
+from xml.sax.saxutils import escape
 
 from .envelope import encode_envelope
 from .errors import GsbError, PatchConflictError
@@ -81,6 +83,45 @@ class LosslessPatchWriter:
 
     def replace_record(self, span: ElementSpan, attributes: Mapping) -> None:
         self.replace(span, serialize_record(span.tag, attributes))
+
+    def replace_attribute(
+        self,
+        span: ElementSpan,
+        attribute: str,
+        value: object,
+    ) -> None:
+        """Patch one attribute value without serializing the surrounding record.
+
+        This is used by Phase 6 quick marking. A batch of checked/unchecked rows
+        changes only the one-byte ``Ma`` values and preserves every other byte,
+        including attribute order, quoting, whitespace and unknown metadata.
+        """
+        raw = span.raw(self.document.xml_bytes)
+        pattern = re.compile(
+            rb"(?P<prefix>\s"
+            + re.escape(attribute.encode("ascii"))
+            + rb"\s*=\s*)(?P<quote>[\"'])(?P<value>[\s\S]*?)(?P=quote)"
+        )
+        match = pattern.search(raw)
+        if match is None:
+            raise GsbError("%s attribute %s is missing" % (span.tag, attribute))
+        encoded = escape(
+            str(value),
+            {
+                '"': "&quot;",
+                "\r": "&#13;",
+                "\n": "&#10;",
+                "\t": "&#9;",
+            },
+        ).encode("utf-8")
+        start = span.start + match.start("value")
+        end = span.start + match.end("value")
+        self._append(
+            start,
+            end,
+            encoded,
+            "replace %s.%s" % (span.tag, attribute),
+        )
 
     def delete(self, span: ElementSpan) -> None:
         # Delete the entire physical line only when it contains the record and
