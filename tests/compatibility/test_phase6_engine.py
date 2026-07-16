@@ -23,7 +23,7 @@ from ncgrisbi.protocol import PROTOCOL_VERSION
 from ncgrisbi.snapshot import build_account_snapshot
 from ncgrisbi.validator import assert_valid_document, warning_issues
 
-FIXTURE = ROOT / "tests" / "compatibility" / "fixtures" / "grisbi-1.2.2-basic.gsb"
+FIXTURE = ROOT / "tests" / "compatibility" / "fixtures" / "grisbi-1.2.2-real.gsb"
 
 
 def _root(raw: bytes) -> ET.Element:
@@ -108,7 +108,7 @@ def test_mixed_batch_is_parsed_once_and_rendered_once(monkeypatch) -> None:
         ],
     )
 
-    assert calls == 2  # initial raw file and one final plain-XML verification
+    assert calls == 2
     assert _transaction(result.raw_bytes, "3").get("Am") == "-45.00"
     assert _transaction(result.raw_bytes, "4").get("Am") == "45.00"
     assert {
@@ -231,7 +231,6 @@ def test_quick_mark_batch_changes_only_ma_attribute_values() -> None:
         _transaction(result.raw_bytes, str(number)).get("Ma") == "1"
         for number in range(1, 65)
     )
-    # Attribute-level patching must preserve every other byte in the real file.
     normalized_before = re.sub(rb'Ma="[01]"', b'Ma="X"', raw)
     normalized_after = re.sub(rb'Ma="[01]"', b'Ma="X"', result.raw_bytes)
     assert normalized_after == normalized_before
