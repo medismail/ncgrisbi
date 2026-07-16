@@ -37,3 +37,16 @@ class RecordNotFoundError(MutationError):
 
 class MutationConflictError(MutationError):
     """Raised when a batch mutates the same record incompatibly."""
+
+
+class ConfirmationRequiredError(MutationError):
+    """Raised when a destructive mutation needs explicit user confirmation."""
+
+    def __init__(self, reason, transaction_ids, message):
+        self.reason = str(reason)
+        self.transaction_ids = tuple(str(value) for value in transaction_ids)
+        super().__init__(message)
+
+
+class MarkStateError(MutationError):
+    """Raised when quick marking targets a telepointed or reconciled row."""
