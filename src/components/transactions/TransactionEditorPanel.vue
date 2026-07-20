@@ -192,6 +192,11 @@
 import { computed, ref } from 'vue'
 import TransactionAutocomplete from './TransactionAutocomplete.vue'
 import {
+  resetCategoryDependentFields,
+  resetTransferPaymentFields,
+  setDraftMarked,
+} from '@/domain/editorDraftMutations.mjs'
+import {
   TRANSFER_CATEGORY,
   applyPartyCompletionTrace,
   buildResponsiveMutationOperations,
@@ -252,7 +257,7 @@ const oppositeAmount = computed(() => {
 })
 const checked = computed({
   get: () => Number(props.draft.marked) === 1,
-  set: value => { props.draft.marked = value ? 1 : 0 },
+  set: value => setDraftMarked(props.draft, value),
 })
 
 function remember(kind, item) {
@@ -281,11 +286,7 @@ function partyCleared() { partyInput('') }
 
 function categoryInput(value) {
   updateSelectionText(props.draft, 'category', value, categoryChoices.value)
-  props.draft.subcategoryName = ''
-  props.draft.subcategorySelectionId = null
-  props.draft.transferAccountSelectionId = null
-  props.draft.transferPaymentMethodName = ''
-  props.draft.transferPaymentMethodSelectionId = null
+  resetCategoryDependentFields(props.draft)
 }
 function categorySelected(item) {
   setSelectedItem(props.draft, 'category', item)
@@ -307,8 +308,7 @@ function sourcePaymentCleared() { sourcePaymentInput('') }
 
 function transferAccountInput(value) {
   updateSelectionText(props.draft, 'transferAccount', value, transferAccounts.value)
-  props.draft.transferPaymentMethodName = ''
-  props.draft.transferPaymentMethodSelectionId = null
+  resetTransferPaymentFields(props.draft)
 }
 function transferAccountSelected(item) {
   setSelectedItem(props.draft, 'transferAccount', item)
