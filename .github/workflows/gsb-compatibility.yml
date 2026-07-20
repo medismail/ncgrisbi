@@ -43,14 +43,18 @@ jobs:
       - name: Lint PHP sources and tests
         run: find lib appinfo tests/php -name '*.php' -print0 | xargs -0 -n1 php -l
 
-      - name: Check Phase 5 JavaScript modules
+      - name: Check transaction JavaScript modules
         run: |
           node --check src/domain/snapshotWire.mjs
           node --check src/domain/transactionEditor.mjs
+          node --check src/domain/responsiveEditor.mjs
           node --check src/services/gsbApi.js
 
       - name: Test Phase 5 frontend mutation planning
         run: node tests/frontend/test_phase5_editor.mjs
+
+      - name: Test Phase 8A responsive batch planning
+        run: node tests/frontend/test_phase8a_ui.mjs
 
       - name: Test binary process protocol
         run: php tests/php/test_phase3_process.php
@@ -63,3 +67,6 @@ jobs:
 
       - name: Test Phase 5 source contract
         run: php tests/php/test_phase5_source_contract.php
+
+      - name: Test Phase 8A source contract
+        run: php tests/php/test_phase8a_source_contract.php
