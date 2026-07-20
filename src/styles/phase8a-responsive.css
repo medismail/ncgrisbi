@@ -1,0 +1,14 @@
+.workspace {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace > .transaction-list {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.workspace > .transaction-list > .scroller {
+  min-height: 0;
+}
