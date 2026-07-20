@@ -13,6 +13,7 @@ $view = file_get_contents($root . '/src/views/TransactionListView.vue');
 $panel = file_get_contents($root . '/src/components/transactions/TransactionEditorPanel.vue');
 $autocomplete = file_get_contents($root . '/src/components/transactions/TransactionAutocomplete.vue');
 $domain = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
+$draftMutations = file_get_contents($root . '/src/domain/editorDraftMutations.mjs');
 
 phase8a_check(str_contains($view, 'DynamicScroller'), 'responsive list lost virtual scrolling');
 phase8a_check(str_contains($view, 'TransactionEditorPanel'), 'single responsive editor is missing');
@@ -29,6 +30,11 @@ phase8a_check(str_contains($panel, 'Changes stay local'), 'local draft behavior 
 phase8a_check(str_contains($panel, 'Account transfer'), 'dedicated transfer editor is missing');
 phase8a_check(str_contains($panel, 'Advanced fields'), 'advanced field disclosure is missing');
 phase8a_check(str_contains($panel, 'applyPartyCompletionTrace'), 'traceable party completion is missing');
+phase8a_check(!preg_match('/props\.draft\.[A-Za-z0-9_]+\s*=/', $panel), 'editor directly mutates the draft prop');
+phase8a_check(str_contains($panel, 'setDraftMarked(props.draft'), 'marked-state mutation is not delegated');
+phase8a_check(str_contains($panel, 'resetCategoryDependentFields(props.draft'), 'category dependent reset is not delegated');
+phase8a_check(str_contains($panel, 'resetTransferPaymentFields(props.draft'), 'transfer payment reset is not delegated');
+phase8a_check(str_contains($draftMutations, 'Object.assign(draft'), 'draft mutation domain helpers are missing');
 phase8a_check(str_contains($autocomplete, 'role="combobox"'), 'autocomplete accessibility contract is missing');
 phase8a_check(str_contains($autocomplete, 'ArrowDown') && str_contains($autocomplete, 'ArrowUp'), 'autocomplete keyboard navigation is missing');
 phase8a_check(str_contains($autocomplete, 'recentIds'), 'recent autocomplete ordering is missing');
