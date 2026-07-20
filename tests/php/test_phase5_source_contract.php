@@ -55,7 +55,8 @@ phase5_check(str_contains($engine, 'allowReconciled'), 'reconciled transfer conf
 phase5_check(str_contains($writer, 'replace_attribute'), 'attribute-level Ma patching is missing');
 phase5_check(str_contains($editor, "type: 'setTransactionMarks'"), 'frontend does not batch quick marks');
 phase5_check(
-    str_contains($view, '!row.quickMarkable')
+    str_contains($view, 'row.isNew || row.quickMarkable')
+    && str_contains($view, 'quickMarkChanged')
     && !str_contains($view, ':disabled="!isEditable(row)" @change="row.marked'),
     'marked checkbox still requires full edit mode'
 );
@@ -71,4 +72,4 @@ phase5_check(
 );
 phase5_check(str_contains($view, 'etag-conflict'), 'ETag conflicts are not handled');
 
- echo "phase6 source contract tests passed\n";
+echo "phase6/phase8a source contract tests passed\n";
