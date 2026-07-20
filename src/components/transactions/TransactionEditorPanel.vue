@@ -3,15 +3,26 @@
     <section class="transaction-panel" role="dialog" aria-modal="true" :aria-label="title">
       <header class="panel-header">
         <div>
-          <p class="eyebrow">{{ draft.isNew ? 'Pending new transaction' : `Transaction ${draft.transactionId}` }}</p>
+          <p class="eyebrow">
+            {{ localDraft.isNew ? 'Pending new transaction' : `Transaction ${localDraft.transactionId}` }}
+          </p>
           <h2>{{ title }}</h2>
           <p class="local-note">Changes stay local until “Save all to file”.</p>
         </div>
-        <button type="button" class="icon-button" aria-label="Close transaction editor" @click="$emit('cancel')">×</button>
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="Close transaction editor"
+          @click="$emit('cancel')"
+        >
+          ×
+        </button>
       </header>
 
       <div class="panel-body">
-        <div v-if="editorError" class="editor-error" role="alert">{{ editorError }}</div>
+        <div v-if="editorError" class="editor-error" role="alert">
+          {{ editorError }}
+        </div>
         <div v-if="completionTrace" class="completion-notice">
           <span>Filled from the latest transaction for this party.</span>
           <button type="button" @click="undoCompletion">Undo</button>
@@ -20,16 +31,27 @@
         <div class="field-grid common-fields">
           <label>
             <span>Date</span>
-            <input v-model="draft.date" type="text" inputmode="numeric" placeholder="MM/DD/YYYY">
+            <input
+              v-model="localDraft.date"
+              type="text"
+              inputmode="numeric"
+              placeholder="MM/DD/YYYY"
+            >
           </label>
           <label :class="{ autofilled: isAutoFilled('amount') }">
             <span>Amount</span>
-            <input v-model="draft.amount" type="number" step="any" inputmode="decimal" @change="amountChanged">
+            <input
+              v-model="localDraft.amount"
+              type="number"
+              step="any"
+              inputmode="decimal"
+              @change="amountChanged"
+            >
           </label>
 
           <TransactionAutocomplete
-            :model-value="draft.partyName"
-            :selected-id="draft.partySelectionId"
+            :model-value="localDraft.partyName"
+            :selected-id="localDraft.partySelectionId"
             :items="snapshot.parties"
             :recent-ids="recentSelections.party"
             label="Party"
@@ -45,8 +67,8 @@
           />
 
           <TransactionAutocomplete
-            :model-value="draft.categoryName"
-            :selected-id="draft.categorySelectionId"
+            :model-value="localDraft.categoryName"
+            :selected-id="localDraft.categorySelectionId"
             :items="categoryChoices"
             :recent-ids="recentSelections.category"
             label="Category"
@@ -71,8 +93,8 @@
           </div>
           <div class="field-grid">
             <TransactionAutocomplete
-              :model-value="draft.subcategoryName"
-              :selected-id="draft.transferAccountSelectionId"
+              :model-value="localDraft.subcategoryName"
+              :selected-id="localDraft.transferAccountSelectionId"
               :items="transferAccounts"
               :recent-ids="recentSelections.transferAccount"
               label="Destination account"
@@ -82,8 +104,8 @@
               @clear="transferAccountCleared"
             />
             <TransactionAutocomplete
-              :model-value="draft.paymentMethodName"
-              :selected-id="draft.paymentMethodSelectionId"
+              :model-value="localDraft.paymentMethodName"
+              :selected-id="localDraft.paymentMethodSelectionId"
               :items="sourcePaymentChoices"
               :recent-ids="recentSelections.payment"
               label="Source payment method"
@@ -93,8 +115,8 @@
               @clear="sourcePaymentCleared"
             />
             <TransactionAutocomplete
-              :model-value="draft.transferPaymentMethodName"
-              :selected-id="draft.transferPaymentMethodSelectionId"
+              :model-value="localDraft.transferPaymentMethodName"
+              :selected-id="localDraft.transferPaymentMethodSelectionId"
               :items="targetPaymentChoices"
               :recent-ids="recentSelections.transferPayment"
               label="Destination payment method"
@@ -105,15 +127,15 @@
             />
           </div>
           <p class="transfer-summary">
-            {{ snapshot.account.name }}: {{ draft.amount || '0' }} {{ snapshot.account.currency.code }} ·
+            {{ snapshot.account.name }}: {{ localDraft.amount || '0' }} {{ snapshot.account.currency.code }} ·
             {{ targetAccount?.name || 'destination' }}: {{ oppositeAmount }}
           </p>
         </section>
 
         <div v-else class="field-grid">
           <TransactionAutocomplete
-            :model-value="draft.subcategoryName"
-            :selected-id="draft.subcategorySelectionId"
+            :model-value="localDraft.subcategoryName"
+            :selected-id="localDraft.subcategorySelectionId"
             :items="subcategoryChoices"
             :recent-ids="recentSelections.subcategory"
             label="Subcategory"
@@ -127,8 +149,8 @@
             @clear="subcategoryCleared"
           />
           <TransactionAutocomplete
-            :model-value="draft.paymentMethodName"
-            :selected-id="draft.paymentMethodSelectionId"
+            :model-value="localDraft.paymentMethodName"
+            :selected-id="localDraft.paymentMethodSelectionId"
             :items="sourcePaymentChoices"
             :recent-ids="recentSelections.payment"
             label="Payment method"
@@ -142,17 +164,17 @@
 
         <label class="note-field" :class="{ autofilled: isAutoFilled('note') }">
           <span>Note</span>
-          <textarea v-model="draft.note" rows="3" placeholder="Optional note"></textarea>
+          <textarea v-model="localDraft.note" rows="3" placeholder="Optional note"></textarea>
         </label>
 
         <div class="marked-field">
           <span>Bank check status</span>
-          <label v-if="draft.isNew || draft.quickMarkable" class="checkbox-label">
+          <label v-if="localDraft.isNew || localDraft.quickMarkable" class="checkbox-label">
             <input v-model="checked" type="checkbox">
             <span>{{ checked ? 'Checked' : 'Unchecked' }}</span>
           </label>
           <span v-else class="locked-state">
-            {{ Number(draft.marked) === 3 ? 'Reconciled — locked' : 'Telepointed — locked' }}
+            {{ Number(localDraft.marked) === 3 ? 'Reconciled — locked' : 'Telepointed — locked' }}
           </span>
         </div>
 
@@ -161,19 +183,24 @@
           <div class="field-grid">
             <label>
               <span>Value date</span>
-              <input v-model="draft.valueDate" type="text" inputmode="numeric" placeholder="MM/DD/YYYY">
+              <input
+                v-model="localDraft.valueDate"
+                type="text"
+                inputmode="numeric"
+                placeholder="MM/DD/YYYY"
+              >
             </label>
             <label :class="{ autofilled: isAutoFilled('paymentReference') }">
               <span>Payment reference</span>
-              <input v-model="draft.paymentReference" type="text">
+              <input v-model="localDraft.paymentReference" type="text">
             </label>
             <label :class="{ autofilled: isAutoFilled('voucher') }">
               <span>Voucher</span>
-              <input v-model="draft.voucher" type="text">
+              <input v-model="localDraft.voucher" type="text">
             </label>
             <label :class="{ autofilled: isAutoFilled('bankReference') }">
               <span>Bank reference</span>
-              <input v-model="draft.bankReference" type="text">
+              <input v-model="localDraft.bankReference" type="text">
             </label>
           </div>
         </details>
@@ -182,19 +209,22 @@
       <footer class="panel-footer">
         <button type="button" @click="$emit('cancel')">Cancel</button>
         <button type="button" class="primary" @click="apply(false)">Save draft</button>
-        <button type="button" class="primary secondary-action" @click="apply(true)">Save draft & add another</button>
+        <button type="button" class="primary secondary-action" @click="apply(true)">
+          Save draft & add another
+        </button>
       </footer>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import TransactionAutocomplete from './TransactionAutocomplete.vue'
 import {
   resetCategoryDependentFields,
   resetTransferPaymentFields,
   setDraftMarked,
+  syncEditorDraft,
 } from '@/domain/editorDraftMutations.mjs'
 import {
   TRANSFER_CATEGORY,
@@ -227,8 +257,21 @@ const editorError = ref('')
 const completionTrace = ref(null)
 const autoFilledFields = ref([])
 
-const title = computed(() => props.draft.isNew ? 'New transaction' : 'Edit transaction')
-const isTransfer = computed(() => normalizeName(props.draft.categoryName) === normalizeName(TRANSFER_CATEGORY))
+function clone(value) {
+  if (typeof structuredClone === 'function') return structuredClone(value)
+  return JSON.parse(JSON.stringify(value))
+}
+
+const localDraft = reactive(clone(props.draft))
+
+watch(
+  localDraft,
+  value => syncEditorDraft(props.draft, value),
+  { deep: true, flush: 'sync' },
+)
+
+const title = computed(() => localDraft.isNew ? 'New transaction' : 'Edit transaction')
+const isTransfer = computed(() => normalizeName(localDraft.categoryName) === normalizeName(TRANSFER_CATEGORY))
 const categoryChoices = computed(() => [
   { id: '__transfer__', name: TRANSFER_CATEGORY, isTransfer: true, secondary: 'Account transfer' },
   ...props.snapshot.categories,
@@ -236,28 +279,28 @@ const categoryChoices = computed(() => [
 const transferAccounts = computed(() => props.snapshot.accounts
   .filter(item => !item.closed && String(item.id) !== String(props.snapshot.account.id)))
 const currentCategory = computed(() => props.snapshot.categories.find(item =>
-  String(item.id) === String(props.draft.categorySelectionId ?? '')
-  || normalizeName(item.name) === normalizeName(props.draft.categoryName)))
+  String(item.id) === String(localDraft.categorySelectionId ?? '')
+  || normalizeName(item.name) === normalizeName(localDraft.categoryName)))
 const subcategoryChoices = computed(() => currentCategory.value?.subcategories ?? [])
 const sourcePaymentChoices = computed(() => paymentMethodsForAmount(
   props.snapshot,
   props.snapshot.account.id,
-  props.draft.amount,
+  localDraft.amount,
 ))
 const targetAccount = computed(() => transferAccounts.value.find(item =>
-  String(item.id) === String(props.draft.transferAccountSelectionId ?? '')
-  || normalizeName(item.name) === normalizeName(props.draft.subcategoryName)))
+  String(item.id) === String(localDraft.transferAccountSelectionId ?? '')
+  || normalizeName(item.name) === normalizeName(localDraft.subcategoryName)))
 const targetPaymentChoices = computed(() => targetAccount.value
-  ? paymentMethodsForAmount(props.snapshot, targetAccount.value.id, String(-Number(props.draft.amount)))
+  ? paymentMethodsForAmount(props.snapshot, targetAccount.value.id, String(-Number(localDraft.amount)))
   : [])
 const oppositeAmount = computed(() => {
-  const amount = Number(props.draft.amount)
+  const amount = Number(localDraft.amount)
   if (!Number.isFinite(amount)) return '—'
   return `${(-amount).toFixed(props.snapshot.account.currency.precision)} ${props.snapshot.account.currency.code}`
 })
 const checked = computed({
-  get: () => Number(props.draft.marked) === 1,
-  set: value => setDraftMarked(props.draft, value),
+  get: () => Number(localDraft.marked) === 1,
+  set: value => setDraftMarked(localDraft, value),
 })
 
 function remember(kind, item) {
@@ -269,66 +312,114 @@ function isAutoFilled(field) {
 }
 
 function partyInput(value) {
-  updateSelectionText(props.draft, 'party', value, props.snapshot.parties)
+  updateSelectionText(localDraft, 'party', value, props.snapshot.parties)
   completionTrace.value = null
   autoFilledFields.value = []
 }
+
 function partySelected(item) {
-  setSelectedItem(props.draft, 'party', item)
+  setSelectedItem(localDraft, 'party', item)
   remember('party', item)
-  completionTrace.value = applyPartyCompletionTrace(props.draft, props.snapshot)
+  completionTrace.value = applyPartyCompletionTrace(localDraft, props.snapshot)
   autoFilledFields.value = completionTrace.value?.fields ?? []
-  onAmountDirectionChanged(props.draft, props.snapshot)
-  syncSelectionIds(props.draft, props.snapshot)
+  onAmountDirectionChanged(localDraft, props.snapshot)
+  syncSelectionIds(localDraft, props.snapshot)
 }
-function partyCreated(value) { partyInput(value) }
-function partyCleared() { partyInput('') }
+
+function partyCreated(value) {
+  partyInput(value)
+}
+
+function partyCleared() {
+  partyInput('')
+}
 
 function categoryInput(value) {
-  updateSelectionText(props.draft, 'category', value, categoryChoices.value)
-  resetCategoryDependentFields(props.draft)
+  updateSelectionText(localDraft, 'category', value, categoryChoices.value)
+  resetCategoryDependentFields(localDraft)
 }
+
 function categorySelected(item) {
-  setSelectedItem(props.draft, 'category', item)
+  setSelectedItem(localDraft, 'category', item)
   remember('category', item)
-  onAmountDirectionChanged(props.draft, props.snapshot)
-  syncSelectionIds(props.draft, props.snapshot)
+  onAmountDirectionChanged(localDraft, props.snapshot)
+  syncSelectionIds(localDraft, props.snapshot)
 }
-function categoryCreated(value) { categoryInput(value) }
-function categoryCleared() { categoryInput('') }
 
-function subcategoryInput(value) { updateSelectionText(props.draft, 'subcategory', value, subcategoryChoices.value) }
-function subcategorySelected(item) { setSelectedItem(props.draft, 'subcategory', item); remember('subcategory', item) }
-function subcategoryCreated(value) { subcategoryInput(value) }
-function subcategoryCleared() { subcategoryInput('') }
+function categoryCreated(value) {
+  categoryInput(value)
+}
 
-function sourcePaymentInput(value) { updateSelectionText(props.draft, 'payment', value, sourcePaymentChoices.value) }
-function sourcePaymentSelected(item) { setSelectedItem(props.draft, 'payment', item); remember('payment', item) }
-function sourcePaymentCleared() { sourcePaymentInput('') }
+function categoryCleared() {
+  categoryInput('')
+}
+
+function subcategoryInput(value) {
+  updateSelectionText(localDraft, 'subcategory', value, subcategoryChoices.value)
+}
+
+function subcategorySelected(item) {
+  setSelectedItem(localDraft, 'subcategory', item)
+  remember('subcategory', item)
+}
+
+function subcategoryCreated(value) {
+  subcategoryInput(value)
+}
+
+function subcategoryCleared() {
+  subcategoryInput('')
+}
+
+function sourcePaymentInput(value) {
+  updateSelectionText(localDraft, 'payment', value, sourcePaymentChoices.value)
+}
+
+function sourcePaymentSelected(item) {
+  setSelectedItem(localDraft, 'payment', item)
+  remember('payment', item)
+}
+
+function sourcePaymentCleared() {
+  sourcePaymentInput('')
+}
 
 function transferAccountInput(value) {
-  updateSelectionText(props.draft, 'transferAccount', value, transferAccounts.value)
-  resetTransferPaymentFields(props.draft)
+  updateSelectionText(localDraft, 'transferAccount', value, transferAccounts.value)
+  resetTransferPaymentFields(localDraft)
 }
-function transferAccountSelected(item) {
-  setSelectedItem(props.draft, 'transferAccount', item)
-  remember('transferAccount', item)
-  onAmountDirectionChanged(props.draft, props.snapshot)
-  syncSelectionIds(props.draft, props.snapshot)
-}
-function transferAccountCleared() { transferAccountInput('') }
 
-function targetPaymentInput(value) { updateSelectionText(props.draft, 'transferPayment', value, targetPaymentChoices.value) }
-function targetPaymentSelected(item) { setSelectedItem(props.draft, 'transferPayment', item); remember('transferPayment', item) }
-function targetPaymentCleared() { targetPaymentInput('') }
+function transferAccountSelected(item) {
+  setSelectedItem(localDraft, 'transferAccount', item)
+  remember('transferAccount', item)
+  onAmountDirectionChanged(localDraft, props.snapshot)
+  syncSelectionIds(localDraft, props.snapshot)
+}
+
+function transferAccountCleared() {
+  transferAccountInput('')
+}
+
+function targetPaymentInput(value) {
+  updateSelectionText(localDraft, 'transferPayment', value, targetPaymentChoices.value)
+}
+
+function targetPaymentSelected(item) {
+  setSelectedItem(localDraft, 'transferPayment', item)
+  remember('transferPayment', item)
+}
+
+function targetPaymentCleared() {
+  targetPaymentInput('')
+}
 
 function amountChanged() {
-  onAmountDirectionChanged(props.draft, props.snapshot)
-  syncSelectionIds(props.draft, props.snapshot)
+  onAmountDirectionChanged(localDraft, props.snapshot)
+  syncSelectionIds(localDraft, props.snapshot)
 }
 
 function undoCompletion() {
-  undoPartyCompletion(props.draft, completionTrace.value, props.snapshot)
+  undoPartyCompletion(localDraft, completionTrace.value, props.snapshot)
   completionTrace.value = null
   autoFilledFields.value = []
 }
@@ -336,12 +427,13 @@ function undoCompletion() {
 function apply(addAnother) {
   editorError.value = ''
   try {
-    buildResponsiveMutationOperations([props.draft], props.snapshot)
+    buildResponsiveMutationOperations([localDraft], props.snapshot)
   } catch (error) {
     editorError.value = error.message
     return
   }
-  emit(addAnother ? 'apply-add' : 'apply', props.draft)
+  syncEditorDraft(props.draft, localDraft)
+  emit(addAnother ? 'apply-add' : 'apply', clone(localDraft))
 }
 </script>
 
