@@ -18,16 +18,3 @@ export function resetTransferPaymentFields(draft) {
     transferPaymentMethodSelectionId: null,
   })
 }
-
-function cloneDraft(source) {
-  if (typeof structuredClone === 'function') return structuredClone(source)
-  return JSON.parse(JSON.stringify(source))
-}
-
-export function syncEditorDraft(target, source) {
-  const copy = cloneDraft(source)
-  for (const key of Object.keys(target)) {
-    if (!(key in copy)) delete target[key]
-  }
-  Object.assign(target, copy)
-}
