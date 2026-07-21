@@ -12,3 +12,9 @@
 .workspace > .transaction-list > .scroller {
   min-height: 0;
 }
+
+@media (max-width: 540px) {
+  .workspace .totals > span:not(.pending-count) {
+    display: inline;
+  }
+}
