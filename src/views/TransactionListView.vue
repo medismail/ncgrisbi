@@ -7,63 +7,72 @@
 
     <main v-else-if="snapshot" class="workspace">
       <header class="account-header">
-        <div class="account-title">
+        <div class="account-primary">
           <h1>{{ snapshot.account.name }}</h1>
           <span>{{ displayedRows.length }} transactions</span>
         </div>
-        <div class="totals" aria-label="Account totals">
-          <strong>{{ totals.totalAmount }} {{ snapshot.account.currency.code }}</strong>
-          <span>Checked: {{ totals.totalMarkedAmount }} {{ snapshot.account.currency.code }}</span>
-        </div>
-      </header>
 
-      <div v-if="message" class="message" :class="messageType" role="status">
-        <span>{{ message }}</span>
-        <button v-if="conflict" type="button" @click="reloadAfterConflict">Reload current file</button>
-      </div>
-
-      <section class="toolbar" aria-label="Transaction actions">
-        <div class="toolbar-group primary-actions">
-          <button type="button" class="primary-button" :disabled="saving || conflict" @click="addTransaction">
-            Add transaction
-          </button>
-          <button
-            type="button"
-            class="save-button"
-            :disabled="saving || conflict || !pendingChanges"
-            @click="saveChanges"
-          >
-            {{ saving ? 'Saving…' : `Save all to file${pendingSummary.total ? ` (${pendingSummary.total})` : ''}` }}
-          </button>
-          <button type="button" :disabled="saving" @click="reloadSnapshot">Discard pending</button>
-        </div>
-
-        <div class="toolbar-group view-actions">
-          <span class="toolbar-label">Rows</span>
-          <div class="segmented" role="group" aria-label="Transaction row detail">
-            <button type="button" :class="{ active: displayMode === 'compact' }" @click="displayMode = 'compact'">Compact</button>
-            <button type="button" :class="{ active: displayMode === 'detailed' }" @click="displayMode = 'detailed'">Detailed</button>
+        <div class="account-secondary">
+          <div class="totals" aria-label="Account totals">
+            <strong>{{ totals.totalAmount }} {{ snapshot.account.currency.code }}</strong>
+            <span>Checked: {{ totals.totalMarkedAmount }} {{ snapshot.account.currency.code }}</span>
+            <span
+              v-if="pendingSummary.total"
+              class="pending-count"
+              :title="pendingDescription"
+            >
+              {{ pendingSummary.total }} pending
+            </span>
           </div>
-          <label class="filter-control">
+          <div v-if="message" class="header-message" :class="messageType" role="status">
+            <span>{{ message }}</span>
+            <button v-if="conflict" type="button" @click="reloadAfterConflict">Reload</button>
+          </div>
+        </div>
+
+        <div class="header-controls" aria-label="Transaction view and actions">
+          <label class="compact-control">
+            <span>Rows</span>
+            <select v-model="displayMode" aria-label="Transaction row detail">
+              <option value="compact">Compact</option>
+              <option value="detailed">Detailed</option>
+            </select>
+          </label>
+
+          <label class="compact-control bank-filter">
             <span>Bank status</span>
-            <select v-model="markFilter">
-              <option value="all">All</option>
+            <select v-model="markFilter" aria-label="Bank status filter">
+              <option value="all">All statuses</option>
               <option value="unchecked">Unchecked</option>
               <option value="checked">Checked</option>
               <option value="locked">Telepointed / reconciled</option>
             </select>
           </label>
-        </div>
-      </section>
 
-      <div v-if="pendingChanges" class="pending-banner">
-        <strong>{{ pendingSummary.total }} pending change{{ pendingSummary.total === 1 ? '' : 's' }}</strong>
-        <span v-if="pendingSummary.created">{{ pendingSummary.created }} new</span>
-        <span v-if="pendingSummary.edited">{{ pendingSummary.edited }} edited</span>
-        <span v-if="pendingSummary.marked">{{ pendingSummary.marked }} checked/unchecked</span>
-        <span v-if="pendingSummary.deleted">{{ pendingSummary.deleted }} deleted</span>
-        <small>All changes remain in this browser until the single file save.</small>
-      </div>
+          <details class="action-menu">
+            <summary aria-label="Transaction actions" title="Transaction actions">+</summary>
+            <div class="action-popover">
+              <button type="button" :disabled="saving || conflict" @click="runAction('add', $event)">
+                Add transaction
+              </button>
+              <button
+                type="button"
+                :disabled="saving || conflict || !pendingChanges"
+                @click="runAction('save', $event)"
+              >
+                {{ saving ? 'Saving…' : `Save all${pendingSummary.total ? ` (${pendingSummary.total})` : ''}` }}
+              </button>
+              <button
+                type="button"
+                :disabled="saving || !pendingChanges"
+                @click="runAction('discard', $event)"
+              >
+                Discard pending
+              </button>
+            </div>
+          </details>
+        </div>
+      </header>
 
       <section class="transaction-list" :class="`mode-${displayMode}`" aria-label="Transactions">
         <div class="transaction-header" aria-hidden="true">
@@ -98,8 +107,13 @@
                 @click="canOpen(row) && openEditor(row)"
                 @keydown.enter.prevent="canOpen(row) && openEditor(row)"
               >
-                <span class="date-cell">{{ shortDate(row.date) }}</span>
-                <span class="party-cell">{{ row.partyName || 'No party' }}</span>
+                <span class="date-cell">
+                  <span class="date-desktop">{{ shortDate(row.date) }}</span>
+                  <span class="date-mobile">{{ mobileDate(row.date) }}</span>
+                </span>
+                <span class="party-cell" :title="row.partyName || 'No party'">
+                  {{ row.partyName || 'No party' }}
+                </span>
                 <span class="category-cell">
                   <strong>{{ categoryLabel(row) }}</strong>
                   <small v-if="row.subcategoryName">{{ row.subcategoryName }}</small>
@@ -130,6 +144,7 @@
                 </span>
 
                 <span v-if="displayMode === 'detailed'" class="detail-line">
+                  <span class="detail-status" :title="statusTitle(row)"><strong>Status:</strong> {{ statusLabel(row) }}</span>
                   <span v-if="row.paymentMethodName"><strong>Payment:</strong> {{ row.paymentMethodName }}</span>
                   <span v-if="row.isTransfer && row.transferPaymentMethodName"><strong>Counterpart:</strong> {{ row.transferPaymentMethodName }}</span>
                   <span v-if="row.note" class="detail-note"><strong>Note:</strong> {{ row.note }}</span>
@@ -145,19 +160,9 @@
         </div>
       </section>
 
-      <button
-        type="button"
-        class="mobile-add"
-        :disabled="saving || conflict"
-        aria-label="Add transaction"
-        @click="addTransaction"
-      >
-        +
-      </button>
-
       <TransactionEditorPanel
         v-if="editorDraft"
-        :draft="editorDraft"
+        v-model:draft="editorDraft"
         :snapshot="snapshot"
         :recent-selections="recentSelections"
         :auto-focus-party="editorDraft.isNew"
@@ -229,10 +234,13 @@ const filteredRows = computed(() => rows.value.filter(row => {
 const displayedRows = computed(() => [...filteredRows.value].reverse())
 const pendingChanges = computed(() => hasResponsivePendingChanges(rows.value)
   || editorDraftChanged(editorDraft.value, editorBaseline.value))
-const pendingSummary = computed(() => {
-  const prospective = rowsWithActiveDraft()
-  return pendingChangeSummary(prospective)
-})
+const pendingSummary = computed(() => pendingChangeSummary(rowsWithActiveDraft()))
+const pendingDescription = computed(() => [
+  pendingSummary.value.created ? `${pendingSummary.value.created} new` : '',
+  pendingSummary.value.edited ? `${pendingSummary.value.edited} edited` : '',
+  pendingSummary.value.marked ? `${pendingSummary.value.marked} checked/unchecked` : '',
+  pendingSummary.value.deleted ? `${pendingSummary.value.deleted} deleted` : '',
+].filter(Boolean).join(', '))
 const totals = computed(() => calculateTotals(
   rowsWithActiveDraft(),
   snapshot.value?.account?.currency?.precision ?? 2,
@@ -370,10 +378,21 @@ function categoryLabel(row) {
   return row.categoryName || 'Uncategorized'
 }
 
-function shortDate(value) {
+function dateParts(value) {
   const parts = String(value ?? '').split('/')
-  if (parts.length !== 3) return value || '—'
+  return parts.length === 3 ? parts : null
+}
+
+function shortDate(value) {
+  const parts = dateParts(value)
+  if (!parts) return value || '—'
   return `${parts[1]}/${parts[0]}/${parts[2]}`
+}
+
+function mobileDate(value) {
+  const parts = dateParts(value)
+  if (!parts) return value || '—'
+  return `${Number(parts[1])}/${Number(parts[0])}/${String(parts[2]).slice(-2)}`
 }
 
 function formatAmount(value) {
@@ -407,6 +426,17 @@ function rowClasses(row) {
     pending: row.isNew || row.deleted || (!row.isNew && !sameResponsiveValues(row)),
     transfer: row.isTransfer,
   }
+}
+
+function closeActionMenu(event) {
+  event.currentTarget.closest('details')?.removeAttribute('open')
+}
+
+function runAction(action, event) {
+  closeActionMenu(event)
+  if (action === 'add') addTransaction()
+  else if (action === 'save') saveChanges()
+  else if (action === 'discard') reloadSnapshot()
 }
 
 async function submitOperations(operations, confirmed = false) {
@@ -498,30 +528,32 @@ watch(() => route.params.id, async newId => {
 </script>
 
 <style scoped>
-.workspace { min-width: 0; height: 100%; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); padding: 14px 16px 16px; box-sizing: border-box; }
+.workspace { position: relative; min-width: 0; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 8px 12px 12px; box-sizing: border-box; }
 .loading { display: flex; gap: 12px; align-items: center; justify-content: center; min-height: 240px; }
-.account-header { position: sticky; z-index: 20; top: 0; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 8px 0 12px; background: var(--color-main-background); }
-.account-title { min-width: 0; }
-.account-title h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.45rem; }
-.account-title span { opacity: .65; }
-.totals { display: grid; text-align: end; white-space: nowrap; }
-.totals strong { font-size: 1.2rem; }
-.message { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); }
-.message.error { border-color: var(--color-error); }
-.message.warning { border-color: var(--color-warning); }
-.message.success { border-color: var(--color-success); }
-.toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
-.toolbar-group { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
-.toolbar button, .toolbar select { min-height: 36px; }
-.primary-button, .save-button { font-weight: 600; }
-.save-button { background: var(--color-primary-element); color: var(--color-primary-element-text); border-color: transparent; }
-.toolbar-label { font-weight: 600; }
-.segmented { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); overflow: hidden; }
-.segmented button { border: 0; border-radius: 0; }
-.segmented button.active { background: var(--color-primary-element); color: var(--color-primary-element-text); }
-.filter-control { display: flex; align-items: center; gap: 6px; }
-.pending-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--border-radius-large); background: var(--color-primary-light); }
-.pending-banner small { flex-basis: 100%; opacity: .72; }
+.account-header { position: sticky; z-index: 20; top: 0; display: grid; grid-template-rows: auto auto auto; gap: 3px; padding: 3px 0 7px; background: var(--color-main-background); }
+.account-primary { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.account-primary h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.3rem; line-height: 1.25; }
+.account-primary > span { flex: none; opacity: .65; font-size: .86rem; white-space: nowrap; }
+.account-secondary { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 27px; }
+.totals { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: .9rem; }
+.totals strong { font-size: 1rem; }
+.pending-count { padding: 2px 7px; border-radius: 999px; background: var(--color-primary-light); color: var(--color-primary-text); font-weight: 600; }
+.header-message { display: flex; flex: 1; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; font-size: .84rem; }
+.header-message > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-message.error { color: var(--color-error-text); }
+.header-message.warning { color: var(--color-warning-text); }
+.header-message.success { color: var(--color-success-text); }
+.header-message button { min-height: 26px; padding: 2px 7px; }
+.header-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.compact-control { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: .86rem; font-weight: 600; }
+.compact-control select { min-height: 32px; max-width: 220px; }
+.bank-filter { flex: 1; }
+.bank-filter select { width: min(100%, 240px); }
+.action-menu { position: relative; flex: none; }
+.action-menu > summary { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: var(--color-primary-element); color: var(--color-primary-element-text); cursor: pointer; font-size: 25px; line-height: 1; list-style: none; }
+.action-menu > summary::-webkit-details-marker { display: none; }
+.action-popover { position: absolute; z-index: 70; inset-inline-end: 0; top: calc(100% + 5px); display: grid; width: 190px; padding: 6px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); }
+.action-popover button { justify-content: flex-start; min-height: 36px; width: 100%; }
 .transaction-list { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--color-border); border-radius: var(--border-radius-large); overflow: hidden; }
 .transaction-header, .row-content { display: grid; grid-template-columns: 100px minmax(150px, 1.35fr) minmax(150px, 1.2fr) 120px 72px 110px 130px; column-gap: 10px; align-items: center; }
 .transaction-header { padding: 9px 12px; font-weight: 600; background: var(--color-background-dark); border-bottom: 1px solid var(--color-border); }
@@ -539,8 +571,9 @@ watch(() => route.params.id, async newId => {
 .party-cell, .category-cell, .detail-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-cell { display: grid; }
 .category-cell small { opacity: .7; }
-.amount-cell { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
-.amount-cell.credit { color: var(--color-success); }
+.date-mobile { display: none; }
+.amount-cell { font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+.amount-cell.credit { color: #096b2d; }
 .amount-cell.debit { color: var(--color-text-maxcontrast); }
 .mark-cell input { width: 22px; height: 22px; cursor: pointer; }
 .state-icon { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: .78rem; font-weight: 700; }
@@ -550,47 +583,60 @@ watch(() => route.params.id, async newId => {
 .actions-cell { display: flex; gap: 5px; justify-content: flex-end; }
 .actions-cell button { min-height: 32px; padding: 4px 8px; }
 .detail-line { grid-column: 2 / -1; display: flex; gap: 8px 18px; min-width: 0; padding-top: 6px; opacity: .78; font-size: .9rem; }
+.detail-status { display: none; }
 .mode-detailed .row-content { min-height: 88px; align-content: center; }
 .empty-state { padding: 28px; text-align: center; opacity: .7; }
-.mobile-add { display: none; }
+:global(body.theme--dark) .amount-cell.credit,
+:global(body[data-theme-dark]) .amount-cell.credit,
+:global(html[data-theme-dark]) .amount-cell.credit { color: #8ce99a; }
+@media (prefers-color-scheme: dark) {
+  .amount-cell.credit { color: #8ce99a; }
+}
 @media (max-width: 900px) {
-  .workspace { padding: 10px; grid-template-rows: auto auto auto auto minmax(0, 1fr); }
-  .account-header { gap: 10px; }
-  .account-title h1 { font-size: 1.2rem; }
-  .totals { font-size: .9rem; }
-  .toolbar { align-items: stretch; }
-  .primary-actions { width: 100%; }
-  .primary-actions button { flex: 1; }
-  .view-actions { width: 100%; justify-content: space-between; }
+  .workspace { padding: 5px 8px 8px; }
+  .account-primary h1 { font-size: 1.08rem; }
+  .account-primary > span, .account-secondary, .compact-control { font-size: .8rem; }
+  .totals { gap: 6px; font-size: .8rem; }
+  .totals strong { font-size: .92rem; }
+  .header-message { font-size: .78rem; }
+  .compact-control > span { display: none; }
+  .compact-control select { max-width: none; min-width: 0; }
+  .header-controls > .compact-control:first-child { flex: 0 1 105px; }
+  .bank-filter { flex: 1 1 auto; }
+  .bank-filter select { width: 100%; }
   .transaction-header { display: none; }
   .transaction-list { grid-template-rows: minmax(0, 1fr); border-inline: 0; border-radius: 0; }
-  .row-content { grid-template-columns: 68px minmax(0, 1fr) 95px 42px 82px; grid-template-areas:
-    'date party amount mark status'
-    'category category category actions actions'
-    'detail detail detail detail detail';
-    gap: 4px 8px; min-height: 68px; padding: 9px 8px; }
-  .date-cell { grid-area: date; font-size: .88rem; }
-  .party-cell { grid-area: party; font-weight: 600; }
-  .category-cell { grid-area: category; display: flex; gap: 5px; font-size: .88rem; }
+  .row-content { grid-template-columns: 50px minmax(12ch, 1fr) minmax(74px, auto) 34px; grid-template-areas:
+    'date party amount mark'
+    'category category actions actions'
+    'detail detail detail detail';
+    gap: 4px 6px; min-height: 58px; padding: 8px 6px; }
+  .date-cell { grid-area: date; font-size: .82rem; white-space: nowrap; }
+  .date-desktop { display: none; }
+  .date-mobile { display: inline; }
+  .party-cell { grid-area: party; min-width: 12ch; font-weight: 600; }
+  .category-cell { grid-area: category; display: flex; gap: 5px; font-size: .84rem; }
   .category-cell small::before { content: '› '; }
-  .amount-cell { grid-area: amount; }
-  .mark-cell { grid-area: mark; }
-  .status-cell { grid-area: status; text-align: end; font-size: .76rem; }
+  .amount-cell { grid-area: amount; min-width: 74px; }
+  .mark-cell { grid-area: mark; min-width: 34px; }
+  .status-cell { display: none; }
   .actions-cell { grid-area: actions; }
-  .actions-cell button { min-height: 30px; }
-  .detail-line { grid-area: detail; padding-top: 4px; overflow: hidden; white-space: nowrap; }
-  .mode-compact .category-cell, .mode-compact .actions-cell { display: none; }
-  .mode-compact .row-content { grid-template-areas: 'date party amount mark status'; min-height: 58px; }
-  .mode-detailed .row-content { min-height: 94px; }
-  .mobile-add { position: fixed; z-index: 40; display: grid; place-items: center; inset-inline-end: 18px; bottom: 18px; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--color-primary-element); color: var(--color-primary-element-text); box-shadow: 0 5px 18px rgb(0 0 0 / 28%); font-size: 30px; }
+  .actions-cell button { min-height: 30px; padding: 3px 7px; }
+  .detail-line { grid-area: detail; gap: 6px 14px; padding-top: 3px; overflow: hidden; white-space: nowrap; font-size: .82rem; }
+  .detail-status { display: inline; }
+  .mode-compact .category-cell, .mode-compact .actions-cell, .mode-compact .detail-line { display: none; }
+  .mode-compact .row-content { grid-template-areas: 'date party amount mark'; min-height: 54px; }
+  .mode-detailed .row-content { min-height: 90px; }
 }
 @media (max-width: 540px) {
-  .account-header { align-items: flex-start; }
-  .totals strong { font-size: 1rem; }
-  .message { align-items: flex-start; }
-  .view-actions { align-items: flex-end; }
-  .filter-control { display: grid; gap: 2px; }
-  .pending-banner small { display: none; }
-  .primary-actions button:nth-child(3) { flex-basis: 100%; }
+  .account-header { gap: 2px; }
+  .account-primary { gap: 6px; }
+  .account-primary > span { max-width: 105px; overflow: hidden; text-overflow: ellipsis; }
+  .account-secondary { gap: 6px; }
+  .totals > span:not(.pending-count) { display: none; }
+  .header-message { justify-content: flex-start; }
+  .header-controls { gap: 6px; }
+  .header-controls > .compact-control:first-child { flex-basis: 92px; }
+  .action-popover { position: fixed; inset-inline: 8px; top: auto; bottom: 8px; width: auto; }
 }
 </style>
