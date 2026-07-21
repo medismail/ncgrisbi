@@ -2,13 +2,7 @@
   <div class="editor-backdrop" @mousedown.self="$emit('cancel')">
     <section class="transaction-panel" role="dialog" aria-modal="true" :aria-label="title">
       <header class="panel-header">
-        <div>
-          <p class="eyebrow">
-            {{ localDraft.isNew ? 'Pending new transaction' : `Transaction ${localDraft.transactionId}` }}
-          </p>
-          <h2>{{ title }}</h2>
-          <p class="local-note">Changes stay local until “Save all to file”.</p>
-        </div>
+        <h2>{{ title }}</h2>
         <button
           type="button"
           class="icon-button"
@@ -208,9 +202,13 @@
 
       <footer class="panel-footer">
         <button type="button" @click="$emit('cancel')">Cancel</button>
-        <button type="button" class="primary" @click="apply(false)">Save draft</button>
+        <button type="button" class="primary" @click="apply(false)">
+          <span class="desktop-label">Save draft</span>
+          <span class="mobile-label">Save</span>
+        </button>
         <button type="button" class="primary secondary-action" @click="apply(true)">
-          Save draft & add another
+          <span class="desktop-label">Save draft & add another</span>
+          <span class="mobile-label">Save & add</span>
         </button>
       </footer>
     </section>
@@ -224,7 +222,6 @@ import {
   resetCategoryDependentFields,
   resetTransferPaymentFields,
   setDraftMarked,
-  syncEditorDraft,
 } from '@/domain/editorDraftMutations.mjs'
 import {
   TRANSFER_CATEGORY,
@@ -252,7 +249,7 @@ const props = defineProps({
   autoFocusParty: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['apply', 'apply-add', 'cancel', 'recent'])
+const emit = defineEmits(['update:draft', 'apply', 'apply-add', 'cancel', 'recent'])
 const editorError = ref('')
 const completionTrace = ref(null)
 const autoFilledFields = ref([])
@@ -266,7 +263,7 @@ const localDraft = reactive(clone(props.draft))
 
 watch(
   localDraft,
-  value => syncEditorDraft(props.draft, value),
+  value => emit('update:draft', clone(value)),
   { deep: true, flush: 'sync' },
 )
 
@@ -432,56 +429,54 @@ function apply(addAnother) {
     editorError.value = error.message
     return
   }
-  syncEditorDraft(props.draft, localDraft)
   emit(addAnother ? 'apply-add' : 'apply', clone(localDraft))
 }
 </script>
 
 <style scoped>
-.editor-backdrop { position: fixed; z-index: 1050; inset: 0; background: rgb(0 0 0 / 24%); }
-.transaction-panel { position: absolute; inset-block: 0; inset-inline-end: 0; width: min(540px, 94vw); display: grid; grid-template-rows: auto 1fr auto; background: var(--color-main-background); box-shadow: -8px 0 28px rgb(0 0 0 / 22%); }
-.panel-header { display: flex; justify-content: space-between; gap: 20px; padding: 20px; border-bottom: 1px solid var(--color-border); }
-.panel-header h2 { margin: 2px 0 4px; }
-.eyebrow { margin: 0; opacity: .65; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
-.local-note { margin: 0; opacity: .7; }
-.icon-button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; font-size: 26px; cursor: pointer; }
+.editor-backdrop { position: absolute; z-index: 80; inset: 0; overflow: hidden; background: rgb(0 0 0 / 24%); }
+.transaction-panel { position: absolute; inset-block: 0; inset-inline-end: 0; width: min(540px, 94vw); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--color-main-background); box-shadow: -8px 0 28px rgb(0 0 0 / 22%); }
+.panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border-bottom: 1px solid var(--color-border); }
+.panel-header h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.12rem; }
+.icon-button { flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%; background: transparent; font-size: 25px; cursor: pointer; }
 .icon-button:hover { background: var(--color-background-hover); }
-.panel-body { min-height: 0; overflow-y: auto; padding: 20px; display: grid; align-content: start; gap: 18px; }
-.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.panel-body { min-height: 0; overflow-y: auto; padding: 14px 16px; display: grid; align-content: start; gap: 15px; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .common-fields > :nth-child(n + 3) { grid-column: 1 / -1; }
 label { display: grid; gap: 6px; min-width: 0; font-weight: 600; }
 label input, label textarea { width: 100%; min-height: 40px; box-sizing: border-box; font-weight: 400; }
 label textarea { resize: vertical; padding: 8px; }
 .note-field { display: grid; }
 .autofilled { padding: 7px; margin: -7px; border-radius: var(--border-radius); background: var(--color-primary-light); }
-.completion-notice, .editor-error { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border-radius: var(--border-radius-large); }
+.completion-notice, .editor-error { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 9px 11px; border-radius: var(--border-radius-large); }
 .completion-notice { background: var(--color-primary-light); }
 .editor-error { background: var(--color-error-light); color: var(--color-error-text); }
-.transfer-section { display: grid; gap: 14px; padding: 14px; border: 1px solid var(--color-primary-element); border-radius: var(--border-radius-large); }
+.transfer-section { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--color-primary-element); border-radius: var(--border-radius-large); }
 .section-heading { display: flex; justify-content: space-between; gap: 12px; }
 .section-heading h3, .section-heading p { margin: 0; }
 .section-heading p { opacity: .7; }
-.transfer-summary { margin: 0; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.transfer-summary { margin: 0; padding-top: 9px; border-top: 1px solid var(--color-border); }
 .marked-field { display: grid; gap: 8px; font-weight: 600; }
 .checkbox-label { display: flex; align-items: center; gap: 9px; font-weight: 400; }
 .checkbox-label input { width: 22px; height: 22px; min-height: 0; }
 .locked-state { padding: 9px 11px; border-radius: var(--border-radius); background: var(--color-background-dark); }
-.advanced-fields { border-top: 1px solid var(--color-border); padding-top: 12px; }
-.advanced-fields summary { cursor: pointer; font-weight: 600; margin-bottom: 14px; }
-.panel-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--color-border); background: var(--color-main-background); }
-.panel-footer button { min-height: 40px; padding: 8px 14px; }
+.advanced-fields { border-top: 1px solid var(--color-border); padding-top: 10px; }
+.advanced-fields summary { cursor: pointer; font-weight: 600; margin-bottom: 12px; }
+.panel-footer { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--color-border); background: var(--color-main-background); }
+.panel-footer button { flex: 1 1 0; min-width: 0; min-height: 40px; padding: 6px 8px; white-space: nowrap; }
 .panel-footer .primary { background: var(--color-primary-element); color: var(--color-primary-element-text); border-color: transparent; }
-.secondary-action { white-space: nowrap; }
+.mobile-label { display: none; }
 @media (max-width: 700px) {
   .editor-backdrop { background: var(--color-main-background); }
   .transaction-panel { width: 100%; inset: 0; box-shadow: none; }
-  .panel-header { padding: 14px 16px; }
-  .panel-body { padding: 16px; }
-  .field-grid { grid-template-columns: 1fr; }
+  .panel-header { min-height: 44px; padding: 4px 8px 4px 12px; }
+  .panel-body { padding: 11px 12px; gap: 12px; }
+  .field-grid { grid-template-columns: 1fr; gap: 10px; }
   .common-fields > * { grid-column: 1; }
-  label input, label textarea { min-height: 46px; font-size: 16px; }
-  .panel-footer { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; padding: 10px 12px; }
-  .panel-footer button { min-height: 46px; }
-  .panel-footer .secondary-action { grid-column: 1 / -1; }
+  label input, label textarea { min-height: 44px; font-size: 16px; }
+  .panel-footer { position: sticky; bottom: 0; gap: 4px; padding: 6px; }
+  .panel-footer button { min-height: 43px; padding: 5px 4px; font-size: .86rem; }
+  .desktop-label { display: none; }
+  .mobile-label { display: inline; }
 }
 </style>
