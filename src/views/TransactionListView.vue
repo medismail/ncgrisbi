@@ -145,9 +145,9 @@
 
                 <span v-if="displayMode === 'detailed'" class="detail-line">
                   <span class="detail-status" :title="statusTitle(row)"><strong>Status:</strong> {{ statusLabel(row) }}</span>
+                  <span v-if="row.note" class="detail-note"><strong>Note:</strong> {{ row.note }}</span>
                   <span v-if="row.paymentMethodName"><strong>Payment:</strong> {{ row.paymentMethodName }}</span>
                   <span v-if="row.isTransfer && row.transferPaymentMethodName"><strong>Counterpart:</strong> {{ row.transferPaymentMethodName }}</span>
-                  <span v-if="row.note" class="detail-note"><strong>Note:</strong> {{ row.note }}</span>
                   <span v-if="row.bankReference"><strong>Bank ref:</strong> {{ row.bankReference }}</span>
                 </span>
               </div>
@@ -531,10 +531,10 @@ watch(() => route.params.id, async newId => {
 .workspace { position: relative; min-width: 0; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 8px 12px 12px; box-sizing: border-box; }
 .loading { display: flex; gap: 12px; align-items: center; justify-content: center; min-height: 240px; }
 .account-header { position: sticky; z-index: 20; top: 0; display: grid; grid-template-rows: auto auto auto; gap: 3px; padding: 3px 0 7px; background: var(--color-main-background); }
-.account-primary { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.account-primary { display: flex; align-items: baseline; gap: 10px; min-width: 0; padding-inline: 33px; }
 .account-primary h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.3rem; line-height: 1.25; }
 .account-primary > span { flex: none; opacity: .65; font-size: .86rem; white-space: nowrap; }
-.account-secondary { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 27px; }
+.account-secondary { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 27px; padding-inline: 33px; }
 .totals { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: .9rem; }
 .totals strong { font-size: 1rem; }
 .pending-count { padding: 2px 7px; border-radius: 999px; background: var(--color-primary-light); color: var(--color-primary-text); font-weight: 600; }
