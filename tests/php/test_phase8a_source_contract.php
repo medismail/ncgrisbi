@@ -16,6 +16,7 @@ $domain = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
 $draftMutations = file_get_contents($root . '/src/domain/editorDraftMutations.mjs');
 $order = file_get_contents($root . '/src/domain/transactionOrdering.mjs');
 $search = file_get_contents($root . '/src/domain/transactionSearch.mjs');
+$responsiveCss = file_get_contents($root . '/src/styles/phase8a-responsive.css');
 
 phase8a_check(str_contains($view, 'DynamicScroller'), 'responsive list lost virtual scrolling');
 phase8a_check(str_contains($view, 'TransactionEditorPanel'), 'single responsive editor is missing');
@@ -46,6 +47,12 @@ $notePosition = strpos($view, '<span v-if="row.note" class="detail-note">');
 $paymentPosition = strpos($view, '<span v-if="row.paymentMethodName">');
 phase8a_check($notePosition !== false && $paymentPosition !== false && $notePosition < $paymentPosition, 'detail line does not start with note when available');
 phase8a_check(!str_contains($view, 'class="mobile-add"'), 'old single-purpose mobile add button remains');
+phase8a_check(str_contains($view, 'totals.totalMarkedAmount'), 'UI-90 marked total is missing from the header');
+phase8a_check(
+    str_contains($responsiveCss, '.totals > span:first-of-type')
+    && str_contains($responsiveCss, 'display: inline !important'),
+    'UI-90 marked total is hidden by the mobile totals rule'
+);
 
 phase8a_check(str_contains($view, 'sortTransactionsRecentFirst(rows.value)'), 'UI-82 recent-first ordering is missing');
 phase8a_check(str_contains($order, 'dateDifference') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 does not sort date then transaction number');
