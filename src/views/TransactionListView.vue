@@ -23,10 +23,23 @@
             >
               {{ pendingSummary.total }} pending
             </span>
+            <span
+              v-if="compatibilityWarningCount"
+              class="compatibility-warning"
+              :title="compatibilityWarningTitle"
+            >
+              {{ compatibilityWarningCount }} read-only
+            </span>
           </div>
           <div v-if="message" class="header-message" :class="messageType" role="status">
             <span>{{ message }}</span>
-            <button v-if="conflict" type="button" @click="reloadAfterConflict">Reload</button>
+            <button
+              v-if="conflict"
+              type="button"
+              @click="reloadAfterConflict"
+            >
+              Reload & discard drafts
+            </button>
           </div>
         </div>
 
@@ -97,14 +110,25 @@
               placeholder="Search party, note or reference"
               aria-label="Search party, note or reference"
             >
-            <button type="button" class="search-close" aria-label="Close and clear search" title="Close and clear search" @click="closeSearch">
+            <button
+              type="button"
+              class="search-close"
+              aria-label="Close and clear search"
+              title="Close and clear search"
+              @click="closeSearch"
+            >
               ×
             </button>
           </form>
         </div>
       </header>
 
-      <section class="transaction-list" :class="`mode-${displayMode}`" aria-label="Transactions">
+      <section
+        ref="transactionList"
+        class="transaction-list"
+        :class="`mode-${displayMode}`"
+        aria-label="Transactions"
+      >
         <div class="transaction-header" aria-hidden="true">
           <span>Date</span>
           <span>Party</span>
@@ -116,6 +140,7 @@
         </div>
 
         <DynamicScroller
+          ref="scroller"
           class="scroller"
           :items="displayedRows"
           :min-item-size="displayMode === 'detailed' ? 88 : 58"
@@ -132,10 +157,14 @@
             >
               <div
                 class="row-content"
-                :tabindex="canOpen(row) ? 0 : -1"
+                :data-row-key="row.key"
+                :tabindex="row.key === selectedRowKey ? 0 : -1"
                 :role="canOpen(row) ? 'button' : undefined"
-                @click="canOpen(row) && openEditor(row)"
-                @keydown.enter.prevent="canOpen(row) && openEditor(row)"
+                :aria-selected="row.key === selectedRowKey"
+                :aria-invalid="row.key === validationErrorKey ? 'true' : undefined"
+                @click="handleRowClick(row)"
+                @focus="selectRow(row)"
+                @keydown="handleRowKeydown($event, row)"
               >
                 <span class="date-cell">
                   <span class="date-desktop">{{ shortDate(row.date) }}</span>
@@ -159,13 +188,14 @@
                     :disabled="saving || conflict || row.deleted"
                     :title="markTitle(row)"
                     :aria-label="`Mark transaction ${row.transactionId || 'new'}`"
+                    @focus="selectRow(row)"
                     @change="quickMarkChanged(row, $event)"
                   >
                   <span v-else-if="Number(row.marked) === 2" class="state-icon telepointed" title="Telepointed">T</span>
                   <span v-else class="state-icon reconciled" title="Reconciled">R</span>
                 </span>
                 <span class="status-cell" :title="statusTitle(row)">{{ statusLabel(row) }}</span>
-                <span class="actions-cell" @click.stop>
+                <span class="actions-cell" @click.stop @keydown.stop>
                   <button v-if="row.deleted" type="button" @click="undoDelete(row)">Undo</button>
                   <template v-else>
                     <button
@@ -229,12 +259,13 @@
 
 <script setup>
 import { NcAppContent, NcLoadingIcon } from '@nextcloud/vue'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import TransactionEditorPanel from '@/components/transactions/TransactionEditorPanel.vue'
+import { sortTransactionsRecentFirst } from '@/domain/transactionOrdering.mjs'
 import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
 import {
   TRANSFER_CATEGORY,
@@ -271,6 +302,11 @@ const markFilter = ref('all')
 const searchOpen = ref(false)
 const searchQuery = ref('')
 const searchInput = ref(null)
+const scroller = ref(null)
+const transactionList = ref(null)
+const selectedRowKey = ref(null)
+const validationErrorKey = ref(null)
+const validationErrorMessage = ref('')
 const editorDraft = ref(null)
 const editorBaseline = ref(null)
 const editorRowKey = ref(null)
@@ -281,13 +317,13 @@ const recentSelections = reactive({
 let newSequence = 0
 let revertingRoute = false
 
-const filteredRows = computed(() => rows.value.filter(row => {
+const orderedRows = computed(() => sortTransactionsRecentFirst(rows.value))
+const displayedRows = computed(() => orderedRows.value.filter(row => {
   if (markFilter.value === 'unchecked' && Number(row.marked) !== 0) return false
   if (markFilter.value === 'checked' && Number(row.marked) !== 1) return false
   if (markFilter.value === 'locked' && ![2, 3].includes(Number(row.marked))) return false
   return matchesTransactionSearch(row, searchQuery.value)
 }))
-const displayedRows = computed(() => [...filteredRows.value].reverse())
 const pendingChanges = computed(() => hasResponsivePendingChanges(rows.value)
   || editorDraftChanged(editorDraft.value, editorBaseline.value))
 const pendingSummary = computed(() => pendingChangeSummary(rowsWithActiveDraft()))
@@ -304,6 +340,16 @@ const totals = computed(() => calculateTotals(
 const emptyMessage = computed(() => searchQuery.value.trim()
   ? 'No transactions match this search and bank-status filter.'
   : 'No transactions match this bank-status filter.')
+const compatibilityWarningCount = computed(() => snapshot.value?.warnings?.length ?? 0)
+const compatibilityWarningTitle = computed(() => {
+  const warnings = (snapshot.value?.warnings ?? []).map(warning => {
+    if (typeof warning === 'string') return warning
+    return warning?.message ?? warning?.code ?? 'Compatibility warning'
+  })
+  if (!warnings.length) return ''
+  const visible = warnings.slice(0, 3).join(' · ')
+  return warnings.length > 3 ? `${visible} · ${warnings.length - 3} more` : visible
+})
 
 function setMessage(text, type = 'info') {
   message.value = text
@@ -323,6 +369,8 @@ function rowsWithActiveDraft() {
 async function loadSnapshot() {
   loading.value = true
   conflict.value = false
+  validationErrorKey.value = null
+  validationErrorMessage.value = ''
   closeEditorState()
   try {
     const response = await fetchEditorSnapshot({
@@ -337,14 +385,8 @@ async function loadSnapshot() {
     markFilter.value = 'all'
     searchQuery.value = ''
     searchOpen.value = false
-    if (response.snapshot.warnings?.length) {
-      setMessage(
-        `Opened with ${response.snapshot.warnings.length} Grisbi compatibility warning(s). Affected rows remain visible and read-only.`,
-        'warning',
-      )
-    } else {
-      setMessage('')
-    }
+    selectedRowKey.value = null
+    setMessage('')
   } catch (error) {
     const failure = apiError(error)
     setMessage(failure.message, 'error')
@@ -362,11 +404,18 @@ function canOpen(row) {
   return !row.deleted && !row.protected
 }
 
+function clearValidationFor(row) {
+  if (validationErrorKey.value !== row?.key) return
+  validationErrorKey.value = null
+  validationErrorMessage.value = ''
+}
+
 function addTransaction() {
   if (!requestCloseEditor()) return
   newSequence += 1
   const row = newResponsiveDraft(snapshot.value, `new-${newSequence}`, today())
   rows.value.push(row)
+  selectedRowKey.value = row.key
   openEditor(row)
 }
 
@@ -374,6 +423,8 @@ function openEditor(row) {
   if (!canOpen(row)) return
   if (editorRowKey.value === row.key) return
   if (!requestCloseEditor()) return
+  clearValidationFor(row)
+  selectedRowKey.value = row.key
   editorRowKey.value = row.key
   editorDraft.value = cloneEditorDraft(row)
   editorBaseline.value = clone(editorDraft.value)
@@ -397,16 +448,21 @@ function requestCloseEditor() {
   return true
 }
 
-function cancelActiveEditor() {
-  requestCloseEditor()
+async function cancelActiveEditor() {
+  const key = editorRowKey.value
+  if (!requestCloseEditor()) return
+  if (key) await focusRow(key)
 }
 
-function applyActiveDraft(addAnother) {
-  const target = rows.value.find(item => item.key === editorRowKey.value)
+async function applyActiveDraft(addAnother) {
+  const key = editorRowKey.value
+  const target = rows.value.find(item => item.key === key)
   if (!target || !editorDraft.value) return
   applyEditorDraft(target, editorDraft.value)
+  clearValidationFor(target)
   closeEditorState()
   if (addAnother) addTransaction()
+  else if (key) await focusRow(key)
 }
 
 function rememberSelection({ kind, id }) {
@@ -415,6 +471,8 @@ function rememberSelection({ kind, id }) {
 }
 
 function removeTransaction(row) {
+  selectRow(row)
+  clearValidationFor(row)
   if (editorRowKey.value === row.key && !requestCloseEditor()) return
   if (row.isNew) rows.value = rows.value.filter(item => item.key !== row.key)
   else row.deleted = true
@@ -422,10 +480,23 @@ function removeTransaction(row) {
 
 function undoDelete(row) {
   row.deleted = false
+  selectRow(row)
 }
 
 function quickMarkChanged(row, event) {
   row.marked = event.target.checked ? 1 : 0
+  selectRow(row)
+  clearValidationFor(row)
+}
+
+function toggleRowMarked(row) {
+  if (saving.value || conflict.value || row.deleted) return
+  if (!(row.isNew || row.quickMarkable) || ![0, 1].includes(Number(row.marked))) {
+    setMessage(markTitle(row), 'warning')
+    return
+  }
+  row.marked = Number(row.marked) === 1 ? 0 : 1
+  clearValidationFor(row)
 }
 
 function markTitle(row) {
@@ -475,6 +546,7 @@ function statusLabel(row) {
 
 function statusTitle(row) {
   if (row.protected) return `Read-only Grisbi structure: ${row.protectionReasons.join(', ')}`
+  if (row.key === validationErrorKey.value) return validationErrorMessage.value
   if (row.isNew || !sameResponsiveValues(row) || row.deleted) return 'This change has not been written to the GSB file yet.'
   return 'Saved transaction'
 }
@@ -484,6 +556,8 @@ function rowClasses(row) {
     deleted: row.deleted,
     protected: row.protected,
     pending: row.isNew || row.deleted || (!row.isNew && !sameResponsiveValues(row)),
+    selected: row.key === selectedRowKey.value,
+    'validation-error': row.key === validationErrorKey.value,
     transfer: row.isTransfer,
   }
 }
@@ -516,6 +590,73 @@ function runAction(action, event) {
   else if (action === 'discard') reloadSnapshot()
 }
 
+function selectRow(row) {
+  selectedRowKey.value = row.key
+}
+
+function rowElement(key) {
+  return [...(transactionList.value?.querySelectorAll('[data-row-key]') ?? [])]
+    .find(element => element.dataset.rowKey === String(key))
+}
+
+async function focusRow(key) {
+  selectedRowKey.value = key
+  await nextTick()
+  const index = displayedRows.value.findIndex(row => row.key === key)
+  if (index < 0) return
+  scroller.value?.scrollToItem?.(index)
+  await nextTick()
+  rowElement(key)?.focus()
+}
+
+async function moveSelection(offset) {
+  if (!displayedRows.value.length) return
+  const current = displayedRows.value.findIndex(row => row.key === selectedRowKey.value)
+  const initial = current < 0 ? 0 : current
+  const target = Math.min(displayedRows.value.length - 1, Math.max(0, initial + offset))
+  await focusRow(displayedRows.value[target].key)
+}
+
+async function moveSelectionTo(edge) {
+  if (!displayedRows.value.length) return
+  const index = edge === 'start' ? 0 : displayedRows.value.length - 1
+  await focusRow(displayedRows.value[index].key)
+}
+
+function handleRowClick(row) {
+  selectRow(row)
+  if (canOpen(row)) openEditor(row)
+}
+
+function handleRowKeydown(event, row) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    moveSelection(1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveSelection(-1)
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    moveSelectionTo('start')
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    moveSelectionTo('end')
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    if (canOpen(row)) openEditor(row)
+  } else if (event.key === ' ' || event.code === 'Space') {
+    event.preventDefault()
+    toggleRowMarked(row)
+  }
+}
+
+function discardPrompt(context) {
+  const summary = pendingSummary.value
+  const count = summary.total
+  const details = pendingDescription.value || 'open editor changes'
+  return `${context} This will permanently discard ${count} local pending change${count === 1 ? '' : 's'} (${details}). This cannot be undone.`
+}
+
 async function submitOperations(operations, confirmed = false) {
   try {
     const response = await mutateDocument({
@@ -525,8 +666,10 @@ async function submitOperations(operations, confirmed = false) {
       operations,
     })
     etag.value = response.document.etag
-    setMessage('All pending transactions were saved in one file write.', 'success')
+    validationErrorKey.value = null
+    validationErrorMessage.value = ''
     await loadSnapshot()
+    setMessage('All pending transactions were saved in one file write.', 'success')
     return true
   } catch (error) {
     const failure = apiError(error)
@@ -542,12 +685,29 @@ async function submitOperations(operations, confirmed = false) {
     conflict.value = failure.code === 'etag-conflict'
     setMessage(
       conflict.value
-        ? 'The GSB file changed elsewhere. All local drafts are preserved; reload before saving again.'
+        ? `The GSB file changed elsewhere. ${pendingSummary.value.total} local draft change${pendingSummary.value.total === 1 ? '' : 's'} remain preserved in this browser.`
         : failure.message,
       'error',
     )
     return false
   }
+}
+
+async function revealValidationError(error) {
+  validationErrorKey.value = error.rowKey ?? null
+  validationErrorMessage.value = error.message
+  setMessage(
+    error.rowKey
+      ? `Transaction validation failed: ${error.message}`
+      : error.message,
+    'error',
+  )
+  if (!error.rowKey) return
+  markFilter.value = 'all'
+  searchQuery.value = ''
+  searchOpen.value = false
+  await nextTick()
+  await focusRow(error.rowKey)
 }
 
 async function saveChanges() {
@@ -556,7 +716,7 @@ async function saveChanges() {
   try {
     operations = buildResponsiveMutationOperations(prospectiveRows, snapshot.value)
   } catch (error) {
-    setMessage(error.message, 'error')
+    await revealValidationError(error)
     return
   }
   if (!operations.length) {
@@ -579,22 +739,49 @@ async function saveChanges() {
 }
 
 async function reloadSnapshot() {
-  if (pendingChanges.value && !window.confirm('Discard every pending new, edited, deleted and marked transaction?')) return
+  if (pendingChanges.value
+    && !window.confirm(discardPrompt('Reload the GSB file from disk?'))) {
+    return
+  }
   await loadSnapshot()
 }
 
 async function reloadAfterConflict() {
-  if (!window.confirm('Reload the current file and discard all local drafts?')) return
+  if (!window.confirm(discardPrompt('Reload the latest GSB file after the ETag conflict?'))) {
+    return
+  }
   await loadSnapshot()
 }
 
-onMounted(loadSnapshot)
+function handleGlobalKeydown(event) {
+  if (event.key !== 'Escape' || !editorDraft.value) return
+  event.preventDefault()
+  cancelActiveEditor()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+  loadSnapshot()
+})
+onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown))
+
+watch(displayedRows, currentRows => {
+  if (!currentRows.length) {
+    selectedRowKey.value = null
+    return
+  }
+  if (!currentRows.some(row => row.key === selectedRowKey.value)) {
+    selectedRowKey.value = currentRows[0].key
+  }
+})
+
 watch(() => route.params.id, async newId => {
   if (revertingRoute) {
     revertingRoute = false
     return
   }
-  if (pendingChanges.value && !window.confirm('Discard all pending transactions and switch accounts?')) {
+  if (pendingChanges.value
+    && !window.confirm(discardPrompt(`Switch to account ${String(newId)}?`))) {
     revertingRoute = true
     await router.replace({ name: 'Account', params: { id: selectedAccountId.value } })
     return
@@ -614,7 +801,9 @@ watch(() => route.params.id, async newId => {
 .account-secondary { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 27px; padding-inline: 33px; }
 .totals { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: .9rem; }
 .totals strong { font-size: 1rem; }
-.pending-count { padding: 2px 7px; border-radius: 999px; background: var(--color-primary-light); color: var(--color-primary-text); font-weight: 600; }
+.pending-count, .compatibility-warning { padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+.pending-count { background: var(--color-primary-light); color: var(--color-primary-text); }
+.compatibility-warning { background: var(--color-warning); color: #000; }
 .header-message { display: flex; flex: 1; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; font-size: .84rem; }
 .header-message > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-message.error { color: var(--color-error-text); }
@@ -651,9 +840,12 @@ watch(() => route.params.id, async newId => {
 .transaction-row.pending { box-shadow: inset 4px 0 0 var(--color-primary-element); }
 .transaction-row.protected { background: var(--color-background-dark); }
 .transaction-row.deleted { opacity: .58; text-decoration: line-through; }
+.transaction-row.selected .row-content { background: var(--color-background-hover); }
+.transaction-row.validation-error { box-shadow: inset 4px 0 0 var(--color-error); }
+.transaction-row.validation-error .row-content { background: var(--color-error-light); }
 .row-content { min-height: 58px; padding: 7px 12px; box-sizing: border-box; cursor: default; }
 .row-content[role='button'] { cursor: pointer; }
-.row-content[role='button']:hover, .row-content[role='button']:focus { background: var(--color-background-hover); outline: none; }
+.row-content:focus { outline: 2px solid var(--color-primary-element); outline-offset: -2px; }
 .party-cell, .category-cell, .detail-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-cell { display: grid; }
 .category-cell small { opacity: .7; }
@@ -721,7 +913,7 @@ watch(() => route.params.id, async newId => {
   .account-primary { gap: 6px; }
   .account-primary > span { max-width: 105px; overflow: hidden; text-overflow: ellipsis; }
   .account-secondary { gap: 6px; }
-  .totals > span:not(.pending-count) { display: none; }
+  .totals > span:not(.pending-count):not(.compatibility-warning) { display: none; }
   .header-message { justify-content: flex-start; }
   .header-controls { gap: 6px; }
   .display-toggle span { min-width: 43px; }
