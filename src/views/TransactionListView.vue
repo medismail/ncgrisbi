@@ -31,13 +31,17 @@
         </div>
 
         <div class="header-controls" aria-label="Transaction view and actions">
-          <label class="compact-control">
-            <span>Rows</span>
-            <select v-model="displayMode" aria-label="Transaction row detail">
-              <option value="compact">Compact</option>
-              <option value="detailed">Detailed</option>
-            </select>
-          </label>
+          <button
+            type="button"
+            class="display-toggle"
+            :class="{ detailed: displayMode === 'detailed' }"
+            :aria-label="displayMode === 'compact' ? 'Switch to detailed rows' : 'Switch to compact rows'"
+            :aria-pressed="displayMode === 'detailed'"
+            @click="toggleDisplayMode"
+          >
+            <span :class="{ active: displayMode === 'compact' }">Compact</span>
+            <span :class="{ active: displayMode === 'detailed' }">Details</span>
+          </button>
 
           <label class="compact-control bank-filter">
             <span>Bank status</span>
@@ -55,6 +59,9 @@
               <button type="button" :disabled="saving || conflict" @click="runAction('add', $event)">
                 Add transaction
               </button>
+              <button type="button" @click="runAction('search', $event)">
+                Search transactions
+              </button>
               <button
                 type="button"
                 :disabled="saving || conflict || !pendingChanges"
@@ -71,6 +78,29 @@
               </button>
             </div>
           </details>
+
+          <form
+            v-if="searchOpen"
+            class="search-popover"
+            role="search"
+            @submit.prevent
+            @keydown.esc.prevent="closeSearch"
+          >
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9.5 3a6.5 6.5 0 1 0 3.98 11.64L19.85 21 21 19.85l-6.36-6.37A6.5 6.5 0 0 0 9.5 3Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z" />
+            </svg>
+            <input
+              ref="searchInput"
+              v-model="searchQuery"
+              type="search"
+              autocomplete="off"
+              placeholder="Search party, note or reference"
+              aria-label="Search party, note or reference"
+            >
+            <button type="button" class="search-close" aria-label="Close and clear search" title="Close and clear search" @click="closeSearch">
+              ×
+            </button>
+          </form>
         </div>
       </header>
 
@@ -138,16 +168,38 @@
                 <span class="actions-cell" @click.stop>
                   <button v-if="row.deleted" type="button" @click="undoDelete(row)">Undo</button>
                   <template v-else>
-                    <button type="button" :disabled="!canOpen(row)" @click="openEditor(row)">Edit</button>
-                    <button type="button" :disabled="row.protected" @click="removeTransaction(row)">Delete</button>
+                    <button
+                      type="button"
+                      class="row-action-button"
+                      :disabled="!canOpen(row)"
+                      :aria-label="`Edit transaction ${row.transactionId || 'new'}`"
+                      title="Edit"
+                      @click="openEditor(row)"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.04a1 1 0 0 0 0-1.42l-2.5-2.5a1 1 0 0 0-1.42 0l-1.96 1.96 3.75 3.75 2.13-1.79Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="row-action-button delete-action"
+                      :disabled="row.protected"
+                      :aria-label="`Delete transaction ${row.transactionId || 'new'}`"
+                      title="Delete"
+                      @click="removeTransaction(row)"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12Zm3.46-8.12 1.41-1.41L12 10.59l1.12-1.12 1.41 1.41L13.41 12l1.12 1.12-1.41 1.41L12 13.41l-1.12 1.12-1.41-1.41L10.59 12l-1.13-1.12ZM15.5 4l-1-1h-5l-1 1H5v2h14V4h-3.5Z" />
+                      </svg>
+                    </button>
                   </template>
                 </span>
 
                 <span v-if="displayMode === 'detailed'" class="detail-line">
-                  <span class="detail-status" :title="statusTitle(row)"><strong>Status:</strong> {{ statusLabel(row) }}</span>
                   <span v-if="row.note" class="detail-note"><strong>Note:</strong> {{ row.note }}</span>
                   <span v-if="row.paymentMethodName"><strong>Payment:</strong> {{ row.paymentMethodName }}</span>
                   <span v-if="row.isTransfer && row.transferPaymentMethodName"><strong>Counterpart:</strong> {{ row.transferPaymentMethodName }}</span>
+                  <span v-if="row.paymentReference"><strong>Payment ref:</strong> {{ row.paymentReference }}</span>
                   <span v-if="row.bankReference"><strong>Bank ref:</strong> {{ row.bankReference }}</span>
                 </span>
               </div>
@@ -156,7 +208,7 @@
         </DynamicScroller>
 
         <div v-if="!displayedRows.length" class="empty-state">
-          No transactions match this bank-status filter.
+          {{ emptyMessage }}
         </div>
       </section>
 
@@ -177,12 +229,13 @@
 
 <script setup>
 import { NcAppContent, NcLoadingIcon } from '@nextcloud/vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import TransactionEditorPanel from '@/components/transactions/TransactionEditorPanel.vue'
+import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
 import {
   TRANSFER_CATEGORY,
   applyEditorDraft,
@@ -215,6 +268,9 @@ const messageType = ref('info')
 const conflict = ref(false)
 const displayMode = ref('compact')
 const markFilter = ref('all')
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const searchInput = ref(null)
 const editorDraft = ref(null)
 const editorBaseline = ref(null)
 const editorRowKey = ref(null)
@@ -226,10 +282,10 @@ let newSequence = 0
 let revertingRoute = false
 
 const filteredRows = computed(() => rows.value.filter(row => {
-  if (markFilter.value === 'unchecked') return Number(row.marked) === 0
-  if (markFilter.value === 'checked') return Number(row.marked) === 1
-  if (markFilter.value === 'locked') return [2, 3].includes(Number(row.marked))
-  return true
+  if (markFilter.value === 'unchecked' && Number(row.marked) !== 0) return false
+  if (markFilter.value === 'checked' && Number(row.marked) !== 1) return false
+  if (markFilter.value === 'locked' && ![2, 3].includes(Number(row.marked))) return false
+  return matchesTransactionSearch(row, searchQuery.value)
 }))
 const displayedRows = computed(() => [...filteredRows.value].reverse())
 const pendingChanges = computed(() => hasResponsivePendingChanges(rows.value)
@@ -245,6 +301,9 @@ const totals = computed(() => calculateTotals(
   rowsWithActiveDraft(),
   snapshot.value?.account?.currency?.precision ?? 2,
 ))
+const emptyMessage = computed(() => searchQuery.value.trim()
+  ? 'No transactions match this search and bank-status filter.'
+  : 'No transactions match this bank-status filter.')
 
 function setMessage(text, type = 'info') {
   message.value = text
@@ -276,6 +335,8 @@ async function loadSnapshot() {
     rows.value = createResponsiveDrafts(response.snapshot)
     displayMode.value = preferredDisplayMode(response.snapshot.preferences)
     markFilter.value = 'all'
+    searchQuery.value = ''
+    searchOpen.value = false
     if (response.snapshot.warnings?.length) {
       setMessage(
         `Opened with ${response.snapshot.warnings.length} Grisbi compatibility warning(s). Affected rows remain visible and read-only.`,
@@ -374,7 +435,7 @@ function markTitle(row) {
 }
 
 function categoryLabel(row) {
-  if (normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)) return 'Transfer'
+  if (row.isTransfer || normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)) return 'Transfer'
   return row.categoryName || 'Uncategorized'
 }
 
@@ -407,16 +468,15 @@ function formatAmount(value) {
 function statusLabel(row) {
   if (row.deleted) return 'Delete pending'
   if (row.protected) return 'Read only'
-  if (row.isNew) return row.locallyApplied ? 'New pending' : 'New'
+  if (row.isNew) return 'Pending'
   if (!sameResponsiveValues(row)) return 'Changed'
-  if (row.isTransfer) return 'Transfer'
   return 'Saved'
 }
 
 function statusTitle(row) {
   if (row.protected) return `Read-only Grisbi structure: ${row.protectionReasons.join(', ')}`
   if (row.isNew || !sameResponsiveValues(row) || row.deleted) return 'This change has not been written to the GSB file yet.'
-  return row.isTransfer ? 'Reciprocal account transfer' : 'Saved transaction'
+  return 'Saved transaction'
 }
 
 function rowClasses(row) {
@@ -428,13 +488,30 @@ function rowClasses(row) {
   }
 }
 
+function toggleDisplayMode() {
+  displayMode.value = displayMode.value === 'compact' ? 'detailed' : 'compact'
+}
+
 function closeActionMenu(event) {
   event.currentTarget.closest('details')?.removeAttribute('open')
+}
+
+async function openSearch() {
+  searchOpen.value = true
+  await nextTick()
+  searchInput.value?.focus()
+  searchInput.value?.select()
+}
+
+function closeSearch() {
+  searchQuery.value = ''
+  searchOpen.value = false
 }
 
 function runAction(action, event) {
   closeActionMenu(event)
   if (action === 'add') addTransaction()
+  else if (action === 'search') openSearch()
   else if (action === 'save') saveChanges()
   else if (action === 'discard') reloadSnapshot()
 }
@@ -544,7 +621,10 @@ watch(() => route.params.id, async newId => {
 .header-message.warning { color: var(--color-warning-text); }
 .header-message.success { color: var(--color-success-text); }
 .header-message button { min-height: 26px; padding: 2px 7px; }
-.header-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.header-controls { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.display-toggle { display: inline-flex; flex: none; min-height: 32px; padding: 2px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); }
+.display-toggle span { display: grid; place-items: center; min-width: 66px; padding: 3px 7px; border-radius: calc(var(--border-radius-large) - 2px); font-size: .84rem; font-weight: 600; }
+.display-toggle span.active { background: var(--color-primary-element); color: var(--color-primary-element-text); }
 .compact-control { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: .86rem; font-weight: 600; }
 .compact-control select { min-height: 32px; max-width: 220px; }
 .bank-filter { flex: 1; }
@@ -552,10 +632,16 @@ watch(() => route.params.id, async newId => {
 .action-menu { position: relative; flex: none; }
 .action-menu > summary { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: var(--color-primary-element); color: var(--color-primary-element-text); cursor: pointer; font-size: 25px; line-height: 1; list-style: none; }
 .action-menu > summary::-webkit-details-marker { display: none; }
-.action-popover { position: absolute; z-index: 70; inset-inline-end: 0; top: calc(100% + 5px); display: grid; width: 190px; padding: 6px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); }
+.action-popover { position: absolute; z-index: 70; inset-inline-end: 0; top: calc(100% + 5px); bottom: auto; display: grid; width: 190px; padding: 6px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); }
 .action-popover button { justify-content: flex-start; min-height: 36px; width: 100%; }
+.search-popover { position: absolute; z-index: 69; inset-inline-end: 42px; top: calc(100% + 5px); display: grid; grid-template-columns: 24px minmax(0, 1fr) 34px; align-items: center; width: min(420px, calc(100vw - 24px)); min-height: 42px; padding: 5px 6px 5px 10px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); box-sizing: border-box; }
+.search-popover input { width: 100%; min-width: 0; min-height: 34px; border: 0; background: transparent; }
+.search-popover input:focus { outline: none; }
+.search-icon { width: 20px; height: 20px; fill: currentColor; opacity: .7; }
+.search-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 23px; }
+.search-close:hover { background: var(--color-background-hover); }
 .transaction-list { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--color-border); border-radius: var(--border-radius-large); overflow: hidden; }
-.transaction-header, .row-content { display: grid; grid-template-columns: 100px minmax(150px, 1.35fr) minmax(150px, 1.2fr) 120px 72px 110px 130px; column-gap: 10px; align-items: center; }
+.transaction-header, .row-content { display: grid; grid-template-columns: 100px minmax(150px, 1.35fr) minmax(150px, 1.2fr) 120px 72px 110px 76px; column-gap: 10px; align-items: center; }
 .transaction-header { padding: 9px 12px; font-weight: 600; background: var(--color-background-dark); border-bottom: 1px solid var(--color-border); }
 .amount-column, .amount-cell { text-align: end; }
 .mark-column, .mark-cell { text-align: center; }
@@ -580,10 +666,12 @@ watch(() => route.params.id, async newId => {
 .telepointed { background: var(--color-warning); color: #000; }
 .reconciled { background: var(--color-success); color: #fff; }
 .status-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; }
-.actions-cell { display: flex; gap: 5px; justify-content: flex-end; }
-.actions-cell button { min-height: 32px; padding: 4px 8px; }
+.actions-cell { display: flex; gap: 4px; justify-content: flex-end; }
+.actions-cell > button:not(.row-action-button) { min-height: 30px; padding: 3px 7px; }
+.row-action-button { display: grid; place-items: center; width: 30px; height: 30px; min-height: 30px; padding: 4px; border-radius: 50%; }
+.row-action-button svg { width: 18px; height: 18px; fill: currentColor; }
+.delete-action:not(:disabled) { color: var(--color-error); }
 .detail-line { grid-column: 2 / -1; display: flex; gap: 8px 18px; min-width: 0; padding-top: 6px; opacity: .78; font-size: .9rem; }
-.detail-status { display: none; }
 .mode-detailed .row-content { min-height: 88px; align-content: center; }
 .empty-state { padding: 28px; text-align: center; opacity: .7; }
 :global(body.theme--dark) .amount-cell.credit,
@@ -599,17 +687,17 @@ watch(() => route.params.id, async newId => {
   .totals { gap: 6px; font-size: .8rem; }
   .totals strong { font-size: .92rem; }
   .header-message { font-size: .78rem; }
+  .display-toggle span { min-width: 50px; padding-inline: 5px; font-size: .78rem; }
   .compact-control > span { display: none; }
   .compact-control select { max-width: none; min-width: 0; }
-  .header-controls > .compact-control:first-child { flex: 0 1 105px; }
   .bank-filter { flex: 1 1 auto; }
   .bank-filter select { width: 100%; }
   .transaction-header { display: none; }
   .transaction-list { grid-template-rows: minmax(0, 1fr); border-inline: 0; border-radius: 0; }
-  .row-content { grid-template-columns: 50px minmax(12ch, 1fr) minmax(74px, auto) 34px; grid-template-areas:
-    'date party amount mark'
-    'category category actions actions'
-    'detail detail detail detail';
+  .row-content { grid-template-columns: 50px minmax(6ch, 1fr) minmax(6ch, 1fr) minmax(0, .65fr) minmax(74px, auto) 34px; grid-template-areas:
+    'date party party party amount mark'
+    'category category category status actions actions'
+    'detail detail detail detail detail detail';
     gap: 4px 6px; min-height: 58px; padding: 8px 6px; }
   .date-cell { grid-area: date; font-size: .82rem; white-space: nowrap; }
   .date-desktop { display: none; }
@@ -619,14 +707,14 @@ watch(() => route.params.id, async newId => {
   .category-cell small::before { content: '› '; }
   .amount-cell { grid-area: amount; min-width: 74px; }
   .mark-cell { grid-area: mark; min-width: 34px; }
-  .status-cell { display: none; }
-  .actions-cell { grid-area: actions; }
-  .actions-cell button { min-height: 30px; padding: 3px 7px; }
+  .status-cell { display: none; grid-area: status; min-width: 0; text-align: center; font-size: .76rem; }
+  .actions-cell { grid-area: actions; justify-content: flex-end; }
   .detail-line { grid-area: detail; gap: 6px 14px; padding-top: 3px; overflow: hidden; white-space: nowrap; font-size: .82rem; }
-  .detail-status { display: inline; }
-  .mode-compact .category-cell, .mode-compact .actions-cell, .mode-compact .detail-line { display: none; }
-  .mode-compact .row-content { grid-template-areas: 'date party amount mark'; min-height: 54px; }
+  .mode-compact .category-cell, .mode-compact .actions-cell, .mode-compact .status-cell, .mode-compact .detail-line { display: none; }
+  .mode-compact .row-content { grid-template-areas: 'date party party party amount mark'; min-height: 54px; }
+  .mode-detailed .status-cell { display: block; }
   .mode-detailed .row-content { min-height: 90px; }
+  .action-popover { position: absolute; inset-inline-end: 0; top: calc(100% + 5px); bottom: auto; width: 190px; }
 }
 @media (max-width: 540px) {
   .account-header { gap: 2px; }
@@ -636,7 +724,7 @@ watch(() => route.params.id, async newId => {
   .totals > span:not(.pending-count) { display: none; }
   .header-message { justify-content: flex-start; }
   .header-controls { gap: 6px; }
-  .header-controls > .compact-control:first-child { flex-basis: 92px; }
-  .action-popover { position: fixed; inset-inline: 8px; top: auto; bottom: 8px; width: auto; }
+  .display-toggle span { min-width: 43px; }
+  .search-popover { inset-inline: 0; width: 100%; }
 }
 </style>
