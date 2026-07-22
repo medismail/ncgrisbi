@@ -48,6 +48,7 @@ jobs:
           node --check src/domain/snapshotWire.mjs
           node --check src/domain/transactionEditor.mjs
           node --check src/domain/responsiveEditor.mjs
+          node --check src/domain/transactionSearch.mjs
           node --check src/services/gsbApi.js
 
       - name: Test Phase 5 frontend mutation planning
@@ -55,6 +56,9 @@ jobs:
 
       - name: Test Phase 8A responsive batch planning
         run: node tests/frontend/test_phase8a_ui.mjs
+
+      - name: Test Phase 8A transaction search
+        run: node tests/frontend/test_phase8a_search.mjs
 
       - name: Test binary process protocol
         run: php tests/php/test_phase3_process.php
