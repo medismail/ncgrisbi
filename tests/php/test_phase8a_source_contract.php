@@ -14,6 +14,7 @@ $panel = file_get_contents($root . '/src/components/transactions/TransactionEdit
 $autocomplete = file_get_contents($root . '/src/components/transactions/TransactionAutocomplete.vue');
 $domain = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
 $draftMutations = file_get_contents($root . '/src/domain/editorDraftMutations.mjs');
+$order = file_get_contents($root . '/src/domain/transactionOrdering.mjs');
 $search = file_get_contents($root . '/src/domain/transactionSearch.mjs');
 
 phase8a_check(str_contains($view, 'DynamicScroller'), 'responsive list lost virtual scrolling');
@@ -45,6 +46,29 @@ $notePosition = strpos($view, '<span v-if="row.note" class="detail-note">');
 $paymentPosition = strpos($view, '<span v-if="row.paymentMethodName">');
 phase8a_check($notePosition !== false && $paymentPosition !== false && $notePosition < $paymentPosition, 'detail line does not start with note when available');
 phase8a_check(!str_contains($view, 'class="mobile-add"'), 'old single-purpose mobile add button remains');
+
+phase8a_check(str_contains($view, 'sortTransactionsRecentFirst(rows.value)'), 'UI-82 recent-first ordering is missing');
+phase8a_check(str_contains($order, 'dateDifference') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 does not sort date then transaction number');
+phase8a_check(str_contains($view, 'const orderedRows = computed'), 'UI-82 ordering is not cached separately from filtering');
+
+phase8a_check(str_contains($view, 'remain preserved in this browser'), 'UI-97 ETag conflict does not explicitly preserve drafts');
+phase8a_check(str_contains($view, 'Reload & discard drafts'), 'UI-98 conflict reload action is not explicit');
+phase8a_check(str_contains($view, 'This cannot be undone.'), 'UI-98 discard confirmation is not explicit');
+phase8a_check(str_contains($view, 'validationErrorKey'), 'UI-99 validation failure row tracking is missing');
+phase8a_check(str_contains($view, 'validation-error'), 'UI-99 validation failure row styling is missing');
+phase8a_check(str_contains($view, 'scrollToItem'), 'UI-99 validation failure row is not revealed');
+phase8a_check(str_contains($view, 'compatibility-warning'), 'UI-100 compatibility warning indicator is missing');
+phase8a_check(str_contains($view, 'compatibilityWarningCount'), 'UI-100 warning count is missing');
+phase8a_check(!str_contains($view, 'conflict.value = Boolean(response.snapshot.warnings'), 'UI-100 warnings incorrectly block unrelated editing');
+
+phase8a_check(str_contains($view, "event.key === 'ArrowDown'") && str_contains($view, "event.key === 'ArrowUp'"), 'UI-104 row keyboard navigation is missing');
+phase8a_check(str_contains($view, "event.key === 'Home'") && str_contains($view, "event.key === 'End'"), 'UI-104 first/last row keyboard navigation is missing');
+phase8a_check(str_contains($view, "event.key === 'Enter'"), 'UI-105 Enter does not open the selected transaction');
+phase8a_check(str_contains($view, "event.key !== 'Escape' || !editorDraft.value"), 'UI-106 Escape editor close handling is missing');
+phase8a_check(str_contains($view, "event.key === ' ' || event.code === 'Space'"), 'UI-107 Space marked-state toggle is missing');
+phase8a_check(str_contains($view, 'selectedRowKey'), 'keyboard-selected row state is missing');
+phase8a_check(str_contains($view, ':tabindex="row.key === selectedRowKey ? 0 : -1"'), 'row keyboard focus is not roving');
+
 phase8a_check(str_contains($view, 'pendingChangeSummary'), 'pending transaction summary is missing');
 phase8a_check(str_contains($view, 'preferredDisplayMode'), 'Grisbi line preference is not used');
 phase8a_check(str_contains($view, "markFilter.value === 'unchecked'"), 'unchecked filter is missing');
