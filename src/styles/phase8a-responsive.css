@@ -14,7 +14,7 @@
 }
 
 @media (max-width: 540px) {
-  .workspace .totals > span:not(.pending-count) {
-    display: inline;
+  .workspace .account-secondary .totals > span:first-of-type {
+    display: inline !important;
   }
 }
