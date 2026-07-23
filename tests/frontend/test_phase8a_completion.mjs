@@ -16,6 +16,7 @@ const wire = {
   P: [
     ['1', 'Transfer party'],
     ['2', 'Fallback only'],
+    ['3', 'Transfer party'],
   ],
   C: [],
   M: [
@@ -23,11 +24,13 @@ const wire = {
       ['1', 'Exact source method', 1, 1, 0, null],
       ['2', 'Deposit', 2, 1, 0, null],
       ['6', 'Default source method', 1, 1, 0, null],
+      ['7', 'Exact source method', 1, 1, 0, null],
     ]],
     ['2', [
       ['3', 'Transfer out', 1, 1, 0, null],
       ['4', 'Exact counterpart method', 2, 1, 0, null],
       ['5', 'Default counterpart method', 2, 1, 0, null],
+      ['8', 'Exact counterpart method', 2, 1, 0, null],
     ]],
   ],
   T: [[
@@ -59,6 +62,7 @@ const trace = applyPartyCompletionTrace(draft, snapshot)
 
 assert.ok(trace)
 assert.equal(draft.amount, '-40.00')
+assert.equal(draft.partySelectionId, '1')
 assert.equal(draft.categoryName, 'Transfer')
 assert.equal(draft.subcategoryName, 'Savings')
 assert.equal(draft.transferAccountSelectionId, '2')
