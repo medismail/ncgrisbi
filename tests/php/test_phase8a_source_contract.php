@@ -65,7 +65,8 @@ phase8a_check(str_contains($view, 'validationErrorKey'), 'UI-99 validation failu
 phase8a_check(str_contains($view, 'validation-error'), 'UI-99 validation failure row styling is missing');
 phase8a_check(str_contains($view, 'scrollToItem'), 'UI-99 validation failure row is not revealed');
 phase8a_check(str_contains($view, 'compatibility-warning'), 'UI-100 compatibility warning indicator is missing');
-phase8a_check(str_contains($view, 'compatibilityWarningCount'), 'UI-100 warning count is missing');
+phase8a_check(str_contains($view, 'compatibilityWarnings'), 'UI-100 warning count/list is missing');
+phase8a_check(str_contains($view, 'NcPopover'), 'UI-100 warning details are not touch accessible');
 phase8a_check(!str_contains($view, 'conflict.value = Boolean(response.snapshot.warnings'), 'UI-100 warnings incorrectly block unrelated editing');
 
 phase8a_check(str_contains($view, "event.key === 'ArrowDown'") && str_contains($view, "event.key === 'ArrowUp'"), 'UI-104 row keyboard navigation is missing');
