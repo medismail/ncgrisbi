@@ -1,5 +1,5 @@
 <template>
-  <label class="autocomplete-field">
+  <label class="autocomplete-field" :class="{ invalid: error }">
     <span class="field-label">{{ label }}</span>
     <span class="combobox" @focusout="scheduleClose">
       <input
@@ -10,6 +10,8 @@
         :aria-expanded="open ? 'true' : 'false'"
         :aria-controls="listId"
         :aria-activedescendant="activeOptionId"
+        :aria-invalid="error ? 'true' : undefined"
+        :aria-describedby="error && errorMessage ? errorId : undefined"
         role="combobox"
         autocomplete="off"
         @focus="openList"
@@ -42,6 +44,9 @@
         </li>
       </ul>
     </span>
+    <small v-if="error && errorMessage" :id="errorId" class="field-error">
+      {{ errorMessage }}
+    </small>
   </label>
 </template>
 
@@ -60,6 +65,8 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   autofocus: { type: Boolean, default: false },
   maxResults: { type: Number, default: 60 },
+  error: { type: Boolean, default: false },
+  errorMessage: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:modelValue', 'select', 'create', 'clear'])
@@ -67,6 +74,7 @@ const inputElement = ref(null)
 const open = ref(false)
 const activeIndex = ref(0)
 const listId = `transaction-autocomplete-${Math.random().toString(36).slice(2)}`
+const errorId = `${listId}-error`
 
 function normalize(value) {
   return String(value ?? '').normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase()
@@ -129,6 +137,12 @@ watch(visibleOptions, options => {
 onMounted(() => {
   if (props.autofocus) nextTick(() => inputElement.value?.focus())
 })
+
+function focus() {
+  inputElement.value?.focus()
+}
+
+defineExpose({ focus })
 
 function optionId(index) {
   return `${listId}-option-${index}`
@@ -198,6 +212,8 @@ function onKeydown(event) {
 .field-label { font-weight: 600; font-size: .92rem; }
 .combobox { position: relative; display: block; }
 .combobox input { width: 100%; min-height: 40px; padding-right: 34px; box-sizing: border-box; }
+.autocomplete-field.invalid .combobox input { border-color: var(--color-error); box-shadow: 0 0 0 1px var(--color-error); }
+.field-error { color: var(--color-error-text); font-weight: 500; }
 .clear-button { position: absolute; inset-inline-end: 6px; top: 5px; width: 30px; height: 30px; border: 0; background: transparent; font-size: 20px; cursor: pointer; }
 .options { position: absolute; z-index: 1200; top: calc(100% + 4px); inset-inline: 0; max-height: min(320px, 45vh); overflow-y: auto; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 6px 24px rgb(0 0 0 / 18%); }
 .options li { display: flex; justify-content: space-between; gap: 12px; min-height: 38px; padding: 8px 10px; border-radius: var(--border-radius); cursor: pointer; }
