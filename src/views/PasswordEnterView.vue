@@ -30,13 +30,11 @@
         </p>
 
         <div class="password-actions">
+          <NcButton :disabled="submitting" @click="chooseAnotherFile">
+            Choose another file
+          </NcButton>
           <NcButton
-            text="Choose another file"
-            :disabled="submitting"
-            @click="chooseAnotherFile"
-          />
-          <NcButton
-            :text="submitting ? 'Unlocking…' : 'Unlock'"
+            type="primary"
             :disabled="submitting || !password"
             native-type="submit"
           >
@@ -44,6 +42,7 @@
               <NcLoadingIcon v-if="submitting" :size="20" />
               <Send v-else :size="20" />
             </template>
+            {{ submitting ? 'Unlocking…' : 'Unlock' }}
           </NcButton>
         </div>
       </form>
