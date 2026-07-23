@@ -35,9 +35,9 @@ function orderingRecord(row, index) {
     row,
     index,
     date: dateKey(row?.date),
-    number: integerText(row?.transactionId),
+    number: integerText(row?.transactionId ?? row?.id),
     sequence: localSequence(row),
-    key: String(row?.key ?? ''),
+    key: String(row?.key ?? row?.id ?? ''),
   }
 }
 
