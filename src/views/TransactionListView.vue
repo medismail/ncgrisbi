@@ -905,7 +905,7 @@ watch(() => route.params.id, async newId => {
 .actions-cell > button:not(.row-action-button) { min-height: 30px; padding: 3px 7px; }
 .row-action-button { display: grid; place-items: center; width: 30px; height: 30px; min-height: 30px; padding: 4px; border-radius: 50%; }
 .row-action-button svg { width: 18px; height: 18px; fill: currentColor; }
-.delete-action:not(:disabled) { color: var(--color-error); }
+.delete-action:not(:disabled) { color: var(--color-error-text); }
 .detail-line { grid-column: 2 / -1; display: flex; gap: 8px 18px; min-width: 0; padding-top: 6px; opacity: .78; font-size: .9rem; }
 .mode-detailed .row-content { min-height: 88px; align-content: center; }
 .empty-state { padding: 28px; text-align: center; opacity: .7; }
