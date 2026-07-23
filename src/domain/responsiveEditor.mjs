@@ -281,29 +281,55 @@ function uniqueByName(records, name) {
   return matches.length === 1 ? matches[0] : null
 }
 
+function selectedOrUnique(records, selectedId, name) {
+  const selected = selectedRecord(records, selectedId)
+  if (selected && normalizeName(selected.name) === normalizeName(name)) return selected
+  return uniqueByName(records, name)
+}
+
 export function syncSelectionIds(row, snapshot) {
-  row.partySelectionId = uniqueByName(snapshot.parties, row.partyName)?.id ?? null
+  row.partySelectionId = selectedOrUnique(
+    snapshot.parties,
+    row.partySelectionId,
+    row.partyName,
+  )?.id ?? null
+
   if (normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)) {
     row.categorySelectionId = null
     row.subcategorySelectionId = null
-    row.transferAccountSelectionId = uniqueByName(
-      snapshot.accounts.filter(item => !item.closed && String(item.id) !== String(snapshot.account.id)),
+    const transferAccounts = snapshot.accounts.filter(
+      item => !item.closed && String(item.id) !== String(snapshot.account.id),
+    )
+    row.transferAccountSelectionId = selectedOrUnique(
+      transferAccounts,
+      row.transferAccountSelectionId,
       row.subcategoryName,
     )?.id ?? null
     const targetMethods = snapshot.paymentMethodsByAccount?.[String(row.transferAccountSelectionId)] ?? []
-    row.transferPaymentMethodSelectionId = uniqueByName(
+    row.transferPaymentMethodSelectionId = selectedOrUnique(
       targetMethods,
+      row.transferPaymentMethodSelectionId,
       row.transferPaymentMethodName,
     )?.id ?? null
   } else {
-    const category = uniqueByName(snapshot.categories, row.categoryName)
+    const category = selectedOrUnique(
+      snapshot.categories,
+      row.categorySelectionId,
+      row.categoryName,
+    )
     row.categorySelectionId = category?.id ?? null
-    row.subcategorySelectionId = uniqueByName(category?.subcategories ?? [], row.subcategoryName)?.id ?? null
+    row.subcategorySelectionId = selectedOrUnique(
+      category?.subcategories ?? [],
+      row.subcategorySelectionId,
+      row.subcategoryName,
+    )?.id ?? null
     row.transferAccountSelectionId = null
     row.transferPaymentMethodSelectionId = null
   }
-  row.paymentMethodSelectionId = uniqueByName(
+
+  row.paymentMethodSelectionId = selectedOrUnique(
     snapshot.paymentMethodsByAccount?.[String(snapshot.account.id)] ?? [],
+    row.paymentMethodSelectionId,
     row.paymentMethodName,
   )?.id ?? null
 }
