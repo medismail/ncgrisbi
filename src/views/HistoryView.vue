@@ -24,18 +24,17 @@
   </NcAppNavigation>
 
   <NcAppContent class="history-content" app-name="ncgrisbi">
-    <NcEmptyContent :icon="File">
-      <template #desc>
-        <div class="history-intro">
-          <h1>{{ historyFiles.length ? 'Recent Grisbi files' : 'Open a Grisbi file' }}</h1>
-          <p v-if="historyFiles.length">
-            Choose a recent file from the navigation, or open another <code>.gsb</code> file from Nextcloud Files.
-          </p>
-          <p v-else>
-            Open a <code>.gsb</code> file from Nextcloud Files to start. It will then appear here for quick access.
-          </p>
-          <a class="files-link" :href="filesUrl">Open Nextcloud Files</a>
-        </div>
+    <NcEmptyContent
+      :name="historyFiles.length ? 'Recent Grisbi files' : 'Open a Grisbi file'"
+      :description="historyDescription"
+    >
+      <template #icon>
+        <File :size="64" />
+      </template>
+      <template #action>
+        <NcButton :href="filesUrl" type="primary">
+          Open Nextcloud Files
+        </NcButton>
       </template>
     </NcEmptyContent>
   </NcAppContent>
@@ -47,6 +46,7 @@ import {
   NcAppContent,
   NcAppNavigation,
   NcAppNavigationItem,
+  NcButton,
   NcEmptyContent,
 } from '@nextcloud/vue'
 import { generateUrl } from '@nextcloud/router'
@@ -60,6 +60,10 @@ const store = useStore()
 const router = useRouter()
 const storedHistory = ref([])
 const filesUrl = generateUrl('/apps/files/')
+
+const historyDescription = computed(() => historyFiles.value.length
+  ? 'Choose a recent file from the navigation, or open another .gsb file from Nextcloud Files.'
+  : 'Open a .gsb file from Nextcloud Files to start. It will then appear here for quick access.')
 
 function safeParse(json) {
   if (!json) return []
@@ -125,10 +129,4 @@ onMounted(() => {
 
 <style scoped>
 .history-content { display: grid; place-items: center; min-height: 100%; padding: 20px; box-sizing: border-box; }
-.history-intro { display: grid; justify-items: center; gap: 12px; max-width: 560px; text-align: center; }
-.history-intro h1, .history-intro p { margin: 0; }
-.history-intro p { color: var(--color-text-maxcontrast); }
-.files-link { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 5px 14px; border-radius: var(--border-radius-pill); background: var(--color-primary-element); color: var(--color-primary-element-text); text-decoration: none; font-weight: 600; }
-.files-link:hover, .files-link:focus-visible { background: var(--color-primary-element-hover); outline: 2px solid var(--color-primary-element); outline-offset: 2px; }
-code { padding: 1px 4px; border-radius: var(--border-radius); background: var(--color-background-dark); }
 </style>
