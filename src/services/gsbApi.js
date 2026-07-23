@@ -65,7 +65,10 @@ export async function mutateDocument({ filePath, filePassword, baseEtag, operati
     showSuccess('All pending transactions were saved.')
     return response.data
   } catch (error) {
-    showError(apiError(error).message, { timeout: 7000 })
+    const failure = apiError(error)
+    if (failure.code !== 'confirmation-required') {
+      showError(failure.message, { timeout: 7000 })
+    }
     throw error
   }
 }
