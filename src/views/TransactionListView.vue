@@ -23,21 +23,45 @@
             >
               {{ pendingSummary.total }} pending
             </span>
-            <span
-              v-if="compatibilityWarningCount"
-              class="compatibility-warning"
-              :title="compatibilityWarningTitle"
+
+            <NcPopover
+              v-if="compatibilityWarnings.length"
+              popup-role="dialog"
+              popover-base-class="ncgrisbi-compatibility-popover"
             >
-              {{ compatibilityWarningCount }} read-only
-            </span>
+              <template #trigger="{ attrs }">
+                <button
+                  v-bind="attrs"
+                  type="button"
+                  class="compatibility-warning"
+                  :aria-label="`Show ${compatibilityWarnings.length} compatibility warnings`"
+                >
+                  {{ compatibilityWarnings.length }} read-only
+                </button>
+              </template>
+              <div
+                class="compatibility-popover"
+                role="dialog"
+                aria-labelledby="compatibility-popover-title"
+              >
+                <h2 id="compatibility-popover-title">Compatibility warnings</h2>
+                <p>
+                  These transactions use Grisbi structures that are not safely editable here.
+                  Other transactions remain fully editable.
+                </p>
+                <ul>
+                  <li v-for="warning in compatibilityWarnings" :key="warning.key">
+                    <strong v-if="warning.transactionId">Transaction {{ warning.transactionId }}:</strong>
+                    {{ warning.message }}
+                  </li>
+                </ul>
+              </div>
+            </NcPopover>
           </div>
+
           <div v-if="message" class="header-message" :class="messageType" role="status">
             <span>{{ message }}</span>
-            <button
-              v-if="conflict"
-              type="button"
-              @click="reloadAfterConflict"
-            >
+            <button v-if="conflict" type="button" @click="reloadAfterConflict">
               Reload & discard drafts
             </button>
           </div>
@@ -47,7 +71,6 @@
           <button
             type="button"
             class="display-toggle"
-            :class="{ detailed: displayMode === 'detailed' }"
             :aria-label="displayMode === 'compact' ? 'Switch to detailed rows' : 'Switch to compact rows'"
             :aria-pressed="displayMode === 'detailed'"
             @click="toggleDisplayMode"
@@ -132,7 +155,7 @@
         <div class="transaction-header" aria-hidden="true">
           <span>Date</span>
           <span>Party</span>
-          <span class="category-column">Category</span>
+          <span>Category</span>
           <span class="amount-column">Amount</span>
           <span class="mark-column">Marked</span>
           <span>Status</span>
@@ -258,9 +281,9 @@
 </template>
 
 <script setup>
-import { NcAppContent, NcLoadingIcon } from '@nextcloud/vue'
+import { NcAppContent, NcLoadingIcon, NcPopover } from '@nextcloud/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
@@ -340,16 +363,13 @@ const totals = computed(() => calculateTotals(
 const emptyMessage = computed(() => searchQuery.value.trim()
   ? 'No transactions match this search and bank-status filter.'
   : 'No transactions match this bank-status filter.')
-const compatibilityWarningCount = computed(() => snapshot.value?.warnings?.length ?? 0)
-const compatibilityWarningTitle = computed(() => {
-  const warnings = (snapshot.value?.warnings ?? []).map(warning => {
-    if (typeof warning === 'string') return warning
-    return warning?.message ?? warning?.code ?? 'Compatibility warning'
-  })
-  if (!warnings.length) return ''
-  const visible = warnings.slice(0, 3).join(' · ')
-  return warnings.length > 3 ? `${visible} · ${warnings.length - 3} more` : visible
-})
+const compatibilityWarnings = computed(() => (snapshot.value?.warnings ?? []).map((warning, index) => ({
+  key: `${warning?.transactionId ?? warning?.id ?? 'warning'}-${index}`,
+  transactionId: warning?.transactionId ?? warning?.id ?? '',
+  message: typeof warning === 'string'
+    ? warning
+    : warning?.message ?? warning?.code ?? 'Unsupported Grisbi structure.',
+})))
 
 function setMessage(text, type = 'info') {
   message.value = text
@@ -364,6 +384,14 @@ function clone(value) {
 function rowsWithActiveDraft() {
   if (!editorDraft.value || !editorRowKey.value) return rows.value
   return rows.value.map(row => row.key === editorRowKey.value ? clone(editorDraft.value) : row)
+}
+
+function syncSharedPendingState() {
+  store.commit('setTransactionPending', {
+    active: pendingChanges.value,
+    total: pendingSummary.value.total,
+    description: pendingDescription.value || (pendingChanges.value ? 'open transaction editor changes' : ''),
+  })
 }
 
 async function loadSnapshot() {
@@ -651,8 +679,7 @@ function handleRowKeydown(event, row) {
 }
 
 function discardPrompt(context) {
-  const summary = pendingSummary.value
-  const count = summary.total
+  const count = pendingSummary.value.total
   const details = pendingDescription.value || 'open editor changes'
   return `${context} This will permanently discard ${count} local pending change${count === 1 ? '' : 's'} (${details}). This cannot be undone.`
 }
@@ -696,12 +723,7 @@ async function submitOperations(operations, confirmed = false) {
 async function revealValidationError(error) {
   validationErrorKey.value = error.rowKey ?? null
   validationErrorMessage.value = error.message
-  setMessage(
-    error.rowKey
-      ? `Transaction validation failed: ${error.message}`
-      : error.message,
-    'error',
-  )
+  setMessage(error.rowKey ? `Transaction validation failed: ${error.message}` : error.message, 'error')
   if (!error.rowKey) return
   markFilter.value = 'all'
   searchQuery.value = ''
@@ -739,17 +761,12 @@ async function saveChanges() {
 }
 
 async function reloadSnapshot() {
-  if (pendingChanges.value
-    && !window.confirm(discardPrompt('Reload the GSB file from disk?'))) {
-    return
-  }
+  if (pendingChanges.value && !window.confirm(discardPrompt('Reload the GSB file from disk?'))) return
   await loadSnapshot()
 }
 
 async function reloadAfterConflict() {
-  if (!window.confirm(discardPrompt('Reload the latest GSB file after the ETag conflict?'))) {
-    return
-  }
+  if (!window.confirm(discardPrompt('Reload the latest GSB file after the ETag conflict?'))) return
   await loadSnapshot()
 }
 
@@ -759,11 +776,36 @@ function handleGlobalKeydown(event) {
   cancelActiveEditor()
 }
 
+function handleBeforeUnload(event) {
+  if (!store.state.transactionPending.active) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('beforeunload', handleBeforeUnload)
   loadSnapshot()
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown))
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  store.commit('setTransactionPending', { active: false, total: 0, description: '' })
+})
+
+onBeforeRouteLeave(() => {
+  if (!store.state.transactionPending.active) return true
+  if (!window.confirm(discardPrompt('Leave this transaction view?'))) return false
+  store.commit('setTransactionPending', { active: false, total: 0, description: '' })
+  return true
+})
+
+watch(
+  () => [pendingChanges.value, pendingSummary.value.total, pendingDescription.value],
+  syncSharedPendingState,
+  { immediate: true },
+)
 
 watch(displayedRows, currentRows => {
   if (!currentRows.length) {
@@ -780,8 +822,7 @@ watch(() => route.params.id, async newId => {
     revertingRoute = false
     return
   }
-  if (pendingChanges.value
-    && !window.confirm(discardPrompt(`Switch to account ${String(newId)}?`))) {
+  if (pendingChanges.value && !window.confirm(discardPrompt(`Switch to account ${String(newId)}?`))) {
     revertingRoute = true
     await router.replace({ name: 'Account', params: { id: selectedAccountId.value } })
     return
@@ -801,9 +842,12 @@ watch(() => route.params.id, async newId => {
 .account-secondary { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 27px; padding-inline: 33px; }
 .totals { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: .9rem; }
 .totals strong { font-size: 1rem; }
-.pending-count, .compatibility-warning { padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+.pending-count, .compatibility-warning { padding: 2px 7px; border: 0; border-radius: 999px; font-weight: 600; }
 .pending-count { background: var(--color-primary-light); color: var(--color-primary-text); }
-.compatibility-warning { background: var(--color-warning); color: #000; }
+.compatibility-warning { min-height: 25px; background: var(--color-warning); color: #000; cursor: pointer; }
+.compatibility-popover { display: grid; gap: 10px; width: min(420px, calc(100vw - 32px)); max-height: min(440px, 70vh); overflow-y: auto; padding: 14px; box-sizing: border-box; }
+.compatibility-popover h2, .compatibility-popover p, .compatibility-popover ul { margin: 0; }
+.compatibility-popover ul { display: grid; gap: 8px; padding-inline-start: 20px; }
 .header-message { display: flex; flex: 1; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; font-size: .84rem; }
 .header-message > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-message.error { color: var(--color-error-text); }
@@ -821,14 +865,13 @@ watch(() => route.params.id, async newId => {
 .action-menu { position: relative; flex: none; }
 .action-menu > summary { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: var(--color-primary-element); color: var(--color-primary-element-text); cursor: pointer; font-size: 25px; line-height: 1; list-style: none; }
 .action-menu > summary::-webkit-details-marker { display: none; }
-.action-popover { position: absolute; z-index: 70; inset-inline-end: 0; top: calc(100% + 5px); bottom: auto; display: grid; width: 190px; padding: 6px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); }
+.action-popover { position: absolute; z-index: 70; inset-inline-end: 0; top: calc(100% + 5px); display: grid; width: 190px; padding: 6px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); }
 .action-popover button { justify-content: flex-start; min-height: 36px; width: 100%; }
 .search-popover { position: absolute; z-index: 69; inset-inline-end: 42px; top: calc(100% + 5px); display: grid; grid-template-columns: 24px minmax(0, 1fr) 34px; align-items: center; width: min(420px, calc(100vw - 24px)); min-height: 42px; padding: 5px 6px 5px 10px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 5px 18px rgb(0 0 0 / 22%); box-sizing: border-box; }
 .search-popover input { width: 100%; min-width: 0; min-height: 34px; border: 0; background: transparent; }
 .search-popover input:focus { outline: none; }
 .search-icon { width: 20px; height: 20px; fill: currentColor; opacity: .7; }
 .search-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 23px; }
-.search-close:hover { background: var(--color-background-hover); }
 .transaction-list { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--color-border); border-radius: var(--border-radius-large); overflow: hidden; }
 .transaction-header, .row-content { display: grid; grid-template-columns: 100px minmax(150px, 1.35fr) minmax(150px, 1.2fr) 120px 72px 110px 76px; column-gap: 10px; align-items: center; }
 .transaction-header { padding: 9px 12px; font-weight: 600; background: var(--color-background-dark); border-bottom: 1px solid var(--color-border); }
@@ -906,14 +949,13 @@ watch(() => route.params.id, async newId => {
   .mode-compact .row-content { grid-template-areas: 'date party party party amount mark'; min-height: 54px; }
   .mode-detailed .status-cell { display: block; }
   .mode-detailed .row-content { min-height: 90px; }
-  .action-popover { position: absolute; inset-inline-end: 0; top: calc(100% + 5px); bottom: auto; width: 190px; }
 }
 @media (max-width: 540px) {
   .account-header { gap: 2px; }
   .account-primary { gap: 6px; }
   .account-primary > span { max-width: 105px; overflow: hidden; text-overflow: ellipsis; }
   .account-secondary { gap: 6px; }
-  .totals > span:not(.pending-count):not(.compatibility-warning) { display: none; }
+  .totals > span:not(.pending-count) { display: none; }
   .header-message { justify-content: flex-start; }
   .header-controls { gap: 6px; }
   .display-toggle span { min-width: 43px; }
