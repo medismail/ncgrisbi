@@ -23,7 +23,7 @@
     </template>
 
     <template #footer>
-      <NcButton text="Close file" @click="closeFile" />
+      <NcButton @click="closeFile">Close file</NcButton>
     </template>
   </NcAppNavigation>
 
@@ -38,13 +38,9 @@
         <div class="error-state">
           <p>{{ accountError.message }}</p>
           <div class="error-actions">
-            <NcButton text="Retry" @click="fetchAccounts" />
-            <NcButton
-              v-if="isEncrypted"
-              text="Enter password"
-              @click="enterPassword"
-            />
-            <NcButton text="Choose another file" @click="closeFile" />
+            <NcButton @click="fetchAccounts">Retry</NcButton>
+            <NcButton v-if="isEncrypted" @click="enterPassword">Enter password</NcButton>
+            <NcButton @click="closeFile">Choose another file</NcButton>
           </div>
         </div>
       </template>
