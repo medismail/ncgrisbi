@@ -310,24 +310,51 @@ export function syncSelectionIds(row, snapshot) {
 
 export function applyPartyCompletionTrace(row, snapshot) {
   const before = Object.fromEntries(COMPLETION_FIELDS.map(field => [field, row[field]]))
-  const changed = applyPartyCompletion(row, snapshotForRow(snapshot, row))
-  if (!changed) return null
-
   const hint = row.partySelectionId == null
     ? null
     : snapshot.completionByPartyId?.[String(row.partySelectionId)]
+
+  // A new draft starts with the account default payment name but no explicit
+  // selection. Clear that implicit default so the latest party transaction can
+  // supply its actual payment method.
+  if (hint && row.isNew && row.paymentMethodSelectionId == null) {
+    row.paymentMethodName = ''
+  }
+
+  const changed = applyPartyCompletion(row, snapshotForRow(snapshot, row))
+  if (!changed) return null
+
   if (hint) {
+    const sourceMethods = snapshot.paymentMethodsByAccount?.[String(snapshot.account.id)] ?? []
+    const sourceMethod = sourceMethods.find(item => String(item.id) === String(hint.paymentMethodId ?? '0'))
+    if (sourceMethod) {
+      row.paymentMethodName = sourceMethod.name
+      row.paymentMethodSelectionId = String(sourceMethod.id)
+    } else if (!row.paymentMethodName) {
+      onAmountDirectionChanged(row, snapshotForRow(snapshot, row))
+    }
+
     if (normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)) {
       row.categorySelectionId = null
       row.subcategorySelectionId = null
       row.transferAccountSelectionId = nonZeroId(hint.transferAccountId)
+      const target = snapshot.accounts.find(item => String(item.id) === String(row.transferAccountSelectionId ?? ''))
+      if (target) row.subcategoryName = target.name
+
+      const targetMethods = snapshot.paymentMethodsByAccount?.[String(row.transferAccountSelectionId)] ?? []
+      const targetMethod = targetMethods.find(item => String(item.id) === String(hint.targetPaymentMethodId ?? '0'))
+      if (targetMethod) {
+        row.transferPaymentMethodName = targetMethod.name
+        row.transferPaymentMethodSelectionId = String(targetMethod.id)
+      }
     } else {
       row.categorySelectionId = nonZeroId(hint.categoryId)
       row.subcategorySelectionId = nonZeroId(hint.subcategoryId)
       row.transferAccountSelectionId = null
+      row.transferPaymentMethodSelectionId = null
     }
-    row.paymentMethodSelectionId = nonZeroId(hint.paymentMethodId)
   }
+
   syncSelectionIds(row, snapshotForRow(snapshot, row))
   const fields = COMPLETION_FIELDS.filter(field => String(before[field] ?? '') !== String(row[field] ?? ''))
   return { before, fields }
