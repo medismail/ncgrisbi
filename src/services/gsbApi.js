@@ -1,4 +1,5 @@
 import axios from '@nextcloud/axios'
+import { showError, showSuccess } from '@nextcloud/dialogs'
 import { generateUrl } from '@nextcloud/router'
 import { decodeCompactSnapshot } from '@/domain/snapshotWire.mjs'
 
@@ -54,13 +55,19 @@ export async function fetchEditorSnapshot({ accountId, filePath, filePassword })
 }
 
 export async function mutateDocument({ filePath, filePassword, baseEtag, operations }) {
-  const response = await axios.post(generateUrl('/apps/ncgrisbi/api/mutations'), {
-    filePath,
-    filePassword,
-    baseEtag,
-    operations,
-  })
-  return response.data
+  try {
+    const response = await axios.post(generateUrl('/apps/ncgrisbi/api/mutations'), {
+      filePath,
+      filePassword,
+      baseEtag,
+      operations,
+    })
+    showSuccess('All pending transactions were saved.')
+    return response.data
+  } catch (error) {
+    showError(apiError(error).message, { timeout: 7000 })
+    throw error
+  }
 }
 
 export function apiError(error) {
