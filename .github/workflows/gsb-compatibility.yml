@@ -51,6 +51,7 @@ jobs:
           node --check src/domain/transactionOrdering.mjs
           node --check src/domain/transactionSearch.mjs
           node --check src/services/gsbApi.js
+          node --check src/store.js
 
       - name: Test Phase 5 frontend mutation planning
         run: node tests/frontend/test_phase5_editor.mjs
@@ -78,3 +79,6 @@ jobs:
 
       - name: Test Phase 8A source contract
         run: php tests/php/test_phase8a_source_contract.php
+
+      - name: Test view hardening source contract
+        run: php tests/php/test_view_hardening_source_contract.php
