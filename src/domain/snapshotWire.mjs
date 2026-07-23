@@ -1,3 +1,5 @@
+import { sortTransactionsRecentFirst } from './transactionOrdering.mjs'
+
 const TX = {
   id: 0,
   date: 1,
@@ -175,7 +177,38 @@ export function decodeCompactSnapshot(wire) {
       voucher: item[8] ?? null,
       bankReference: item[9] ?? null,
       transferAccountId: item[10] == null ? null : String(item[10]),
+      targetPaymentMethodId: item[11] == null ? null : String(item[11]),
     }
+  }
+
+  // Always prefer the latest transaction from the account currently being edited.
+  // The compact H fallback can come from another account and older XML element
+  // truthiness rules could incorrectly select it even when a local transaction exists.
+  const completedParties = new Set()
+  for (const transaction of sortTransactionsRecentFirst(transactions)) {
+    const partyId = String(transaction.partyId ?? '0')
+    if (partyId === '0'
+      || completedParties.has(partyId)
+      || transaction.splitMotherId != null) {
+      continue
+    }
+    completionByPartyId[partyId] = {
+      partyId,
+      sourceAccountId: account.id,
+      amount: transaction.amount,
+      categoryId: transaction.isTransfer ? '0' : transaction.categoryId,
+      subcategoryId: transaction.isTransfer ? '0' : transaction.subcategoryId,
+      paymentMethodId: transaction.paymentMethodId,
+      note: transaction.note,
+      paymentReference: transaction.paymentReference,
+      voucher: transaction.voucher,
+      bankReference: transaction.bankReference,
+      transferAccountId: transaction.isTransfer ? transaction.transferAccountId : null,
+      targetPaymentMethodId: transaction.isTransfer
+        ? transaction.transferPaymentMethodId
+        : null,
+    }
+    completedParties.add(partyId)
   }
 
   const preferencesWire = wire.U ?? []
