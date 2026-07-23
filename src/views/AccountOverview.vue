@@ -7,9 +7,13 @@
       </div>
     </header>
 
-    <NcEmptyContent v-if="!accounts.length" :icon="Bank">
-      <template #desc>
-        <p>No accounts were found in this Grisbi file.</p>
+    <NcEmptyContent
+      v-if="!accounts.length"
+      name="No accounts found"
+      description="No accounts were found in this Grisbi file."
+    >
+      <template #icon>
+        <Bank :size="64" />
       </template>
     </NcEmptyContent>
 
