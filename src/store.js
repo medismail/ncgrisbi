@@ -1,15 +1,35 @@
 import { createStore } from 'vuex'
+import {
+  apiError,
+  fetchAccounts as fetchAccountsRequest,
+  fetchDocumentState,
+} from './services/gsbApi'
+
+const emptyPendingState = () => ({
+  active: false,
+  total: 0,
+  description: '',
+})
 
 const store = createStore({
   state: {
     accounts: [],
+    accountsLoading: false,
+    accountsError: null,
     filePath: '',
     filePassword: '',
-    isEncrypted: false
+    isEncrypted: false,
+    transactionPending: emptyPendingState(),
   },
   mutations: {
     setAccounts(state, accounts) {
-      state.accounts = accounts
+      state.accounts = Array.isArray(accounts) ? accounts : []
+    },
+    setAccountsLoading(state, loading) {
+      state.accountsLoading = Boolean(loading)
+    },
+    setAccountsError(state, error) {
+      state.accountsError = error ?? null
     },
     setFilePath(state, filePath) {
       state.filePath = filePath
@@ -19,49 +39,73 @@ const store = createStore({
     },
     setEncrypted(state, encrypted) {
       state.isEncrypted = encrypted
-    }
+    },
+    setTransactionPending(state, pending) {
+      state.transactionPending = {
+        active: Boolean(pending?.active),
+        total: Number(pending?.total ?? 0),
+        description: String(pending?.description ?? ''),
+      }
+    },
+    clearFileSession(state) {
+      state.accounts = []
+      state.accountsLoading = false
+      state.accountsError = null
+      state.filePath = ''
+      state.filePassword = ''
+      state.isEncrypted = false
+      state.transactionPending = emptyPendingState()
+    },
   },
   actions: {
-    async fetchAccounts({ commit, state }) {
+    async fetchAccounts({ commit, state }, options = {}) {
       if (!state.filePath) {
-        console.error('File path is required')
-        return
+        const error = new Error('Select a Grisbi file before loading accounts.')
+        commit('setAccountsError', apiError(error))
+        throw error
       }
 
-      //const jsonData = '{"filePath":"' + state.filePath + '","filePassword":"' + state.filePassword + '"}'
-      const data = { filePath: state.filePath, filePassword: state.filePassword }
-      const jsonData = JSON.stringify(data)
-      const requestOptions = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: jsonData
-      }
-
+      commit('setAccountsLoading', true)
+      commit('setAccountsError', null)
       try {
-        const response = await fetch('/apps/ncgrisbi/api/accounts', requestOptions)
-        const accounts = await response.json()
+        const password = options.filePassword ?? state.filePassword
+        const accounts = await fetchAccountsRequest({
+          filePath: state.filePath,
+          filePassword: password,
+        })
         commit('setAccounts', accounts)
+        if (options.commitPassword) commit('setFilePassword', password)
+        return accounts
       } catch (error) {
-        console.error('Failed to fetch accounts:', error)
+        commit('setAccounts', [])
+        commit('setAccountsError', apiError(error))
+        throw error
+      } finally {
+        commit('setAccountsLoading', false)
       }
     },
     async checkPassword({ commit, state }) {
       if (!state.filePath) {
-        console.error('File path is required')
-        return
+        const error = new Error('Select a Grisbi file before checking encryption.')
+        commit('setAccountsError', apiError(error))
+        throw error
       }
       try {
-        const response = await fetch('/apps/ncgrisbi/api/checkencrypted?filePath='+state.filePath)
-        const status = await response.json()
-        const encrypted = status.Encrypted == "True"
-        commit('setEncrypted', encrypted)
+        const document = await fetchDocumentState({ filePath: state.filePath })
+        commit('setEncrypted', document.encrypted)
+        return document
       } catch (error) {
-        console.error('Failed to check password:', error)
+        commit('setAccountsError', apiError(error))
+        throw error
       }
-    }
-  }
+    },
+    async validateFilePassword({ dispatch }, password) {
+      return dispatch('fetchAccounts', {
+        filePassword: String(password ?? ''),
+        commitPassword: true,
+      })
+    },
+  },
 })
 
 export default store
