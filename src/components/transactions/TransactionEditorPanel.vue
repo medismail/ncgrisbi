@@ -23,27 +23,42 @@
         </div>
 
         <div class="field-grid common-fields">
-          <label>
+          <label :class="{ invalid: fieldInvalid('date') }">
             <span>Date</span>
             <input
+              ref="dateInput"
               v-model="localDraft.date"
               type="text"
               inputmode="numeric"
               placeholder="MM/DD/YYYY"
+              :aria-invalid="fieldInvalid('date') ? 'true' : undefined"
+              :aria-describedby="fieldInvalid('date') ? 'transaction-date-error' : undefined"
+              @input="clearFieldError('date')"
             >
+            <small v-if="fieldInvalid('date')" id="transaction-date-error" class="field-error">
+              {{ fieldError.message }}
+            </small>
           </label>
-          <label :class="{ autofilled: isAutoFilled('amount') }">
+          <label :class="[{ autofilled: isAutoFilled('amount') }, { invalid: fieldInvalid('amount') }]">
             <span>Amount</span>
             <input
+              ref="amountInput"
               v-model="localDraft.amount"
               type="number"
               step="any"
               inputmode="decimal"
+              :aria-invalid="fieldInvalid('amount') ? 'true' : undefined"
+              :aria-describedby="fieldInvalid('amount') ? 'transaction-amount-error' : undefined"
+              @input="clearFieldError('amount')"
               @change="amountChanged"
             >
+            <small v-if="fieldInvalid('amount')" id="transaction-amount-error" class="field-error">
+              {{ fieldError.message }}
+            </small>
           </label>
 
           <TransactionAutocomplete
+            ref="partyField"
             :model-value="localDraft.partyName"
             :selected-id="localDraft.partySelectionId"
             :items="snapshot.parties"
@@ -53,6 +68,8 @@
             create-label="Create party"
             allow-create
             :autofocus="autoFocusParty"
+            :error="fieldInvalid('partyName')"
+            :error-message="fieldInvalid('partyName') ? fieldError.message : ''"
             :class="{ autofilled: isAutoFilled('partyName') }"
             @update:model-value="partyInput"
             @select="partySelected"
@@ -61,6 +78,7 @@
           />
 
           <TransactionAutocomplete
+            ref="categoryField"
             :model-value="localDraft.categoryName"
             :selected-id="localDraft.categorySelectionId"
             :items="categoryChoices"
@@ -69,6 +87,8 @@
             placeholder="Select, create, or choose Transfer"
             create-label="Create category"
             allow-create
+            :error="fieldInvalid('categoryName')"
+            :error-message="fieldInvalid('categoryName') ? fieldError.message : ''"
             :class="{ autofilled: isAutoFilled('categoryName') }"
             @update:model-value="categoryInput"
             @select="categorySelected"
@@ -87,34 +107,43 @@
           </div>
           <div class="field-grid">
             <TransactionAutocomplete
+              ref="transferAccountField"
               :model-value="localDraft.subcategoryName"
               :selected-id="localDraft.transferAccountSelectionId"
               :items="transferAccounts"
               :recent-ids="recentSelections.transferAccount"
               label="Destination account"
               placeholder="Choose another account"
+              :error="fieldInvalid('transferAccount')"
+              :error-message="fieldInvalid('transferAccount') ? fieldError.message : ''"
               @update:model-value="transferAccountInput"
               @select="transferAccountSelected"
               @clear="transferAccountCleared"
             />
             <TransactionAutocomplete
+              ref="paymentField"
               :model-value="localDraft.paymentMethodName"
               :selected-id="localDraft.paymentMethodSelectionId"
               :items="sourcePaymentChoices"
               :recent-ids="recentSelections.payment"
               label="Source payment method"
               placeholder="Choose payment method"
+              :error="fieldInvalid('paymentMethodName')"
+              :error-message="fieldInvalid('paymentMethodName') ? fieldError.message : ''"
               @update:model-value="sourcePaymentInput"
               @select="sourcePaymentSelected"
               @clear="sourcePaymentCleared"
             />
             <TransactionAutocomplete
+              ref="transferPaymentField"
               :model-value="localDraft.transferPaymentMethodName"
               :selected-id="localDraft.transferPaymentMethodSelectionId"
               :items="targetPaymentChoices"
               :recent-ids="recentSelections.transferPayment"
               label="Destination payment method"
               placeholder="Choose counterpart method"
+              :error="fieldInvalid('transferPaymentMethodName')"
+              :error-message="fieldInvalid('transferPaymentMethodName') ? fieldError.message : ''"
               @update:model-value="targetPaymentInput"
               @select="targetPaymentSelected"
               @clear="targetPaymentCleared"
@@ -128,6 +157,7 @@
 
         <div v-else class="field-grid">
           <TransactionAutocomplete
+            ref="subcategoryField"
             :model-value="localDraft.subcategoryName"
             :selected-id="localDraft.subcategorySelectionId"
             :items="subcategoryChoices"
@@ -136,6 +166,8 @@
             placeholder="Select or create a subcategory"
             create-label="Create subcategory"
             allow-create
+            :error="fieldInvalid('subcategoryName')"
+            :error-message="fieldInvalid('subcategoryName') ? fieldError.message : ''"
             :class="{ autofilled: isAutoFilled('subcategoryName') }"
             @update:model-value="subcategoryInput"
             @select="subcategorySelected"
@@ -143,12 +175,15 @@
             @clear="subcategoryCleared"
           />
           <TransactionAutocomplete
+            ref="paymentField"
             :model-value="localDraft.paymentMethodName"
             :selected-id="localDraft.paymentMethodSelectionId"
             :items="sourcePaymentChoices"
             :recent-ids="recentSelections.payment"
             label="Payment method"
             placeholder="Choose payment method"
+            :error="fieldInvalid('paymentMethodName')"
+            :error-message="fieldInvalid('paymentMethodName') ? fieldError.message : ''"
             :class="{ autofilled: isAutoFilled('paymentMethodName') }"
             @update:model-value="sourcePaymentInput"
             @select="sourcePaymentSelected"
@@ -161,28 +196,33 @@
           <textarea v-model="localDraft.note" rows="3" placeholder="Optional note"></textarea>
         </label>
 
-        <div class="marked-field">
+        <div class="marked-field" :class="{ invalid: fieldInvalid('marked') }">
           <span>Bank check status</span>
           <label v-if="localDraft.isNew || localDraft.quickMarkable" class="checkbox-label">
-            <input v-model="checked" type="checkbox">
+            <input v-model="checked" type="checkbox" @change="clearFieldError('marked')">
             <span>{{ checked ? 'Checked' : 'Unchecked' }}</span>
           </label>
           <span v-else class="locked-state">
             {{ Number(localDraft.marked) === 3 ? 'Reconciled — locked' : 'Telepointed — locked' }}
           </span>
+          <small v-if="fieldInvalid('marked')" class="field-error">{{ fieldError.message }}</small>
         </div>
 
-        <details class="advanced-fields">
+        <details ref="advancedFields" class="advanced-fields">
           <summary>Advanced fields</summary>
           <div class="field-grid">
-            <label>
+            <label :class="{ invalid: fieldInvalid('valueDate') }">
               <span>Value date</span>
               <input
+                ref="valueDateInput"
                 v-model="localDraft.valueDate"
                 type="text"
                 inputmode="numeric"
                 placeholder="MM/DD/YYYY"
+                :aria-invalid="fieldInvalid('valueDate') ? 'true' : undefined"
+                @input="clearFieldError('valueDate')"
               >
+              <small v-if="fieldInvalid('valueDate')" class="field-error">{{ fieldError.message }}</small>
             </label>
             <label :class="{ autofilled: isAutoFilled('paymentReference') }">
               <span>Payment reference</span>
@@ -216,7 +256,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import TransactionAutocomplete from './TransactionAutocomplete.vue'
 import {
   resetCategoryDependentFields,
@@ -253,6 +293,17 @@ const emit = defineEmits(['update:draft', 'apply', 'apply-add', 'cancel', 'recen
 const editorError = ref('')
 const completionTrace = ref(null)
 const autoFilledFields = ref([])
+const fieldError = reactive({ field: '', message: '' })
+const dateInput = ref(null)
+const amountInput = ref(null)
+const partyField = ref(null)
+const categoryField = ref(null)
+const subcategoryField = ref(null)
+const paymentField = ref(null)
+const transferAccountField = ref(null)
+const transferPaymentField = ref(null)
+const valueDateInput = ref(null)
+const advancedFields = ref(null)
 
 function clone(value) {
   if (typeof structuredClone === 'function') return structuredClone(value)
@@ -300,6 +351,50 @@ const checked = computed({
   set: value => setDraftMarked(localDraft, value),
 })
 
+function fieldInvalid(field) {
+  return fieldError.field === field
+}
+
+function clearFieldError(field) {
+  if (fieldError.field !== field) return
+  fieldError.field = ''
+  fieldError.message = ''
+  editorError.value = ''
+}
+
+function inferErrorField(message) {
+  const text = String(message ?? '')
+  if (/^Date\b/u.test(text)) return 'date'
+  if (/^Value date\b/u.test(text)) return 'valueDate'
+  if (/^Amount\b/u.test(text)) return 'amount'
+  if (/^Party\b/u.test(text)) return 'partyName'
+  if (/^Category\b/u.test(text) || /^A subcategory\b/u.test(text)) return 'categoryName'
+  if (/^Subcategory\b/u.test(text)) return 'subcategoryName'
+  if (/^Destination account\b/u.test(text) || /^Select a destination account\b/u.test(text)) return 'transferAccount'
+  if (/^Destination payment method\b/u.test(text)) return 'transferPaymentMethodName'
+  if (/^Payment method\b/u.test(text)) return 'paymentMethodName'
+  if (/marked|checked|unchecked|reconciled|telepointed/iu.test(text)) return 'marked'
+  return ''
+}
+
+async function focusInvalidField(field) {
+  if (!field) return
+  if (field === 'valueDate') advancedFields.value.open = true
+  await nextTick()
+  const targets = {
+    date: dateInput.value,
+    valueDate: valueDateInput.value,
+    amount: amountInput.value,
+    partyName: partyField.value,
+    categoryName: categoryField.value,
+    subcategoryName: subcategoryField.value,
+    paymentMethodName: paymentField.value,
+    transferAccount: transferAccountField.value,
+    transferPaymentMethodName: transferPaymentField.value,
+  }
+  targets[field]?.focus?.()
+}
+
 function remember(kind, item) {
   if (item?.id != null) emit('recent', { kind, id: String(item.id) })
 }
@@ -309,12 +404,14 @@ function isAutoFilled(field) {
 }
 
 function partyInput(value) {
+  clearFieldError('partyName')
   updateSelectionText(localDraft, 'party', value, props.snapshot.parties)
   completionTrace.value = null
   autoFilledFields.value = []
 }
 
 function partySelected(item) {
+  clearFieldError('partyName')
   setSelectedItem(localDraft, 'party', item)
   remember('party', item)
   completionTrace.value = applyPartyCompletionTrace(localDraft, props.snapshot)
@@ -323,94 +420,84 @@ function partySelected(item) {
   syncSelectionIds(localDraft, props.snapshot)
 }
 
-function partyCreated(value) {
-  partyInput(value)
-}
-
-function partyCleared() {
-  partyInput('')
-}
+function partyCreated(value) { partyInput(value) }
+function partyCleared() { partyInput('') }
 
 function categoryInput(value) {
+  clearFieldError('categoryName')
   updateSelectionText(localDraft, 'category', value, categoryChoices.value)
   resetCategoryDependentFields(localDraft)
 }
 
 function categorySelected(item) {
+  clearFieldError('categoryName')
   setSelectedItem(localDraft, 'category', item)
   remember('category', item)
   onAmountDirectionChanged(localDraft, props.snapshot)
   syncSelectionIds(localDraft, props.snapshot)
 }
 
-function categoryCreated(value) {
-  categoryInput(value)
-}
-
-function categoryCleared() {
-  categoryInput('')
-}
+function categoryCreated(value) { categoryInput(value) }
+function categoryCleared() { categoryInput('') }
 
 function subcategoryInput(value) {
+  clearFieldError('subcategoryName')
   updateSelectionText(localDraft, 'subcategory', value, subcategoryChoices.value)
 }
 
 function subcategorySelected(item) {
+  clearFieldError('subcategoryName')
   setSelectedItem(localDraft, 'subcategory', item)
   remember('subcategory', item)
 }
 
-function subcategoryCreated(value) {
-  subcategoryInput(value)
-}
-
-function subcategoryCleared() {
-  subcategoryInput('')
-}
+function subcategoryCreated(value) { subcategoryInput(value) }
+function subcategoryCleared() { subcategoryInput('') }
 
 function sourcePaymentInput(value) {
+  clearFieldError('paymentMethodName')
   updateSelectionText(localDraft, 'payment', value, sourcePaymentChoices.value)
 }
 
 function sourcePaymentSelected(item) {
+  clearFieldError('paymentMethodName')
   setSelectedItem(localDraft, 'payment', item)
   remember('payment', item)
 }
 
-function sourcePaymentCleared() {
-  sourcePaymentInput('')
-}
+function sourcePaymentCleared() { sourcePaymentInput('') }
 
 function transferAccountInput(value) {
+  clearFieldError('transferAccount')
   updateSelectionText(localDraft, 'transferAccount', value, transferAccounts.value)
   resetTransferPaymentFields(localDraft)
 }
 
 function transferAccountSelected(item) {
+  clearFieldError('transferAccount')
   setSelectedItem(localDraft, 'transferAccount', item)
   remember('transferAccount', item)
   onAmountDirectionChanged(localDraft, props.snapshot)
   syncSelectionIds(localDraft, props.snapshot)
 }
 
-function transferAccountCleared() {
-  transferAccountInput('')
-}
+function transferAccountCleared() { transferAccountInput('') }
 
 function targetPaymentInput(value) {
+  clearFieldError('transferPaymentMethodName')
   updateSelectionText(localDraft, 'transferPayment', value, targetPaymentChoices.value)
 }
 
 function targetPaymentSelected(item) {
+  clearFieldError('transferPaymentMethodName')
   setSelectedItem(localDraft, 'transferPayment', item)
   remember('transferPayment', item)
 }
 
-function targetPaymentCleared() {
-  targetPaymentInput('')
-}
+function targetPaymentCleared() { targetPaymentInput('') }
 
 function amountChanged() {
+  clearFieldError('amount')
   onAmountDirectionChanged(localDraft, props.snapshot)
   syncSelectionIds(localDraft, props.snapshot)
 }
@@ -421,12 +508,17 @@ function undoCompletion() {
   autoFilledFields.value = []
 }
 
-function apply(addAnother) {
+async function apply(addAnother) {
   editorError.value = ''
+  fieldError.field = ''
+  fieldError.message = ''
   try {
     buildResponsiveMutationOperations([localDraft], props.snapshot)
   } catch (error) {
     editorError.value = error.message
+    fieldError.field = inferErrorField(error.message)
+    fieldError.message = error.message
+    await focusInvalidField(fieldError.field)
     return
   }
   emit(addAnother ? 'apply-add' : 'apply', clone(localDraft))
@@ -446,6 +538,9 @@ function apply(addAnother) {
 label { display: grid; gap: 6px; min-width: 0; font-weight: 600; }
 label input, label textarea { width: 100%; min-height: 40px; box-sizing: border-box; font-weight: 400; }
 label textarea { resize: vertical; padding: 8px; }
+label.invalid input, .marked-field.invalid { border-color: var(--color-error); }
+label.invalid input { box-shadow: 0 0 0 1px var(--color-error); }
+.field-error { color: var(--color-error-text); font-weight: 500; }
 .note-field { display: grid; }
 .autofilled { padding: 7px; margin: -7px; border-radius: var(--border-radius); background: var(--color-primary-light); }
 .completion-notice, .editor-error { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 9px 11px; border-radius: var(--border-radius-large); }
@@ -456,7 +551,7 @@ label textarea { resize: vertical; padding: 8px; }
 .section-heading h3, .section-heading p { margin: 0; }
 .section-heading p { opacity: .7; }
 .transfer-summary { margin: 0; padding-top: 9px; border-top: 1px solid var(--color-border); }
-.marked-field { display: grid; gap: 8px; font-weight: 600; }
+.marked-field { display: grid; gap: 8px; padding: 1px; border: 1px solid transparent; border-radius: var(--border-radius); font-weight: 600; }
 .checkbox-label { display: flex; align-items: center; gap: 9px; font-weight: 400; }
 .checkbox-label input { width: 22px; height: 22px; min-height: 0; }
 .locked-state { padding: 9px 11px; border-radius: var(--border-radius); background: var(--color-background-dark); }
