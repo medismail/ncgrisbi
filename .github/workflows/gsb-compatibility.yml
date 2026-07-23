@@ -59,6 +59,9 @@ jobs:
       - name: Test Phase 8A responsive batch planning
         run: node tests/frontend/test_phase8a_ui.mjs
 
+      - name: Test Phase 8A same-account completion
+        run: node tests/frontend/test_phase8a_completion.mjs
+
       - name: Test Phase 8A transaction ordering
         run: node tests/frontend/test_phase8a_ordering.mjs
 
