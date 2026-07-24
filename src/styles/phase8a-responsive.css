@@ -13,6 +13,15 @@
   min-height: 0;
 }
 
+/*
+ * The transaction search form is positioned below the compact header controls.
+ * Reserve its height only while it is mounted so it cannot cover the first row.
+ * When search closes, :has() stops matching and the space disappears.
+ */
+.workspace .header-controls:has(.search-popover) {
+  margin-bottom: 56px;
+}
+
 @media (max-width: 540px) {
   .workspace .account-secondary .totals > span:first-of-type {
     display: inline !important;
