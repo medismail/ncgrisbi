@@ -6,14 +6,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 LIB = ROOT / "lib" / "bin"
+PACKAGE = LIB / "ncgrisbi"
 if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
 from ncgrisbi.formats import GSB_121_PROFILE, SupportLevel, supported_file_versions
-from ncgrisbi.index import GsbIndex
-from ncgrisbi.mutation_engine import apply_mutations
+from ncgrisbi.mutation import apply_mutations
 from ncgrisbi.parser import parse_document
-from ncgrisbi.snapshot_service import build_account_snapshot
+from ncgrisbi.snapshot import build_account_snapshot
 from ncgrisbi.validator import assert_valid_document
 from ncgrisbi.worker import execute_request
 from ncgrisbi.writer import LosslessPatchWriter
@@ -97,13 +97,14 @@ def test_profile_owns_the_121_schema_and_creation_defaults() -> None:
     assert tuple(attributes) == GSB_121_PROFILE.attribute_order["Transaction"]
 
 
-def test_parser_validator_writer_and_index_use_the_document_profile() -> None:
+def test_parser_validator_and_writer_use_the_document_profile() -> None:
     document = parse_document(fixture_bytes())
     assert document.format_profile is GSB_121_PROFILE
     assert_valid_document(document)
-
-    index = GsbIndex.build(document)
-    assert set(index.payments) == {"1", "2"}
+    assert {item.get("Number") for item in document.root.findall("Payment")} == {
+        "1",
+        "2",
+    }
 
     transaction = document.find_span("Transaction", "Nb", "1")
     assert transaction is not None
@@ -152,7 +153,7 @@ def test_mutation_creation_uses_profile_defaults_and_order() -> None:
     assert transaction.get("Mo") == "0"
 
 
-def test_snapshot_service_prefers_current_account_completion() -> None:
+def test_snapshot_prefers_current_account_completion() -> None:
     document = parse_document(fixture_bytes())
     snapshot = build_account_snapshot(document, "1")
     history = {row[0]: row for row in snapshot["H"]}
@@ -216,22 +217,37 @@ def test_envelope_inspection_does_not_require_the_file_password() -> None:
     assert json.loads(output) == {"compressed": False, "encrypted": True}
 
 
-def test_active_entrypoint_does_not_load_legacy_backend_generations() -> None:
+def test_target_package_has_no_transitional_modules() -> None:
     entrypoint = (LIB / "ncgrisbi_protocol.py").read_text(encoding="utf-8")
-    worker = (LIB / "ncgrisbi" / "worker.py").read_text(encoding="utf-8")
-    phase5_shim = (LIB / "ncgrisbi" / "phase5_protocol.py").read_text(
-        encoding="utf-8"
-    )
+    worker = (PACKAGE / "worker.py").read_text(encoding="utf-8")
     process = (ROOT / "lib" / "Grisbi" / "GrisbiProcess.php").read_text(
         encoding="utf-8"
     )
 
     assert "from ncgrisbi.worker import main" in entrypoint
     assert "from .framing import" in worker
-    assert "from .protocol import" not in worker
-    assert "phase4_protocol" not in worker
-    assert "compat_engine" not in worker
-    assert "from .worker import" in phase5_shim
+    assert "from .mutation import apply_mutations" in worker
+    assert "from .read import" in worker
+    assert "from .snapshot import build_account_snapshot" in worker
     assert "$this->legacyWrapperPath" not in process
+
+    removed = {
+        "compat_engine.py",
+        "completion_history.py",
+        "index.py",
+        "mutation_engine.py",
+        "mutations.py",
+        "phase4_protocol.py",
+        "phase5_protocol.py",
+        "phase6_engine.py",
+        "protocol.py",
+        "read_service.py",
+        "resolution.py",
+        "serializer_121.py",
+        "snapshot_service.py",
+    }
+    assert not any((PACKAGE / name).exists() for name in removed)
+    assert (PACKAGE / "formats" / "base.py").exists()
+    assert (PACKAGE / "formats" / "gsb_121.py").exists()
     assert not (LIB / "ncgrisbi_legacy.py").exists()
     assert not (LIB / "grisbi.py").exists()
