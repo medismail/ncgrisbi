@@ -24,7 +24,7 @@ $snapshotWire = file_get_contents($root . '/src/domain/snapshotWire.mjs');
 $responsiveEditor = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
 $responsiveCss = file_get_contents($root . '/src/styles/phase8a-responsive.css');
 $worker = file_get_contents($root . '/lib/bin/ncgrisbi/worker.py');
-$snapshotService = file_get_contents($root . '/lib/bin/ncgrisbi/snapshot_service.py');
+$snapshot = file_get_contents($root . '/lib/bin/ncgrisbi/snapshot.py');
 
 view_check(str_contains($store, 'transactionPending'), 'shared pending transaction state is missing');
 view_check(str_contains($store, 'accountsLoading') && str_contains($store, 'accountsError'), 'account loading/error state is missing');
@@ -91,9 +91,9 @@ view_check(str_contains($responsiveEditor, 'Exact') === false, 'test wording lea
 view_check(str_contains($responsiveEditor, 'hint.targetPaymentMethodId'), 'exact transfer counterpart payment is not applied');
 view_check(str_contains($responsiveEditor, 'row.isNew && row.paymentMethodSelectionId == null'), 'implicit default payment blocks party completion');
 
-view_check(str_contains($worker, 'snapshot_service import build_account_snapshot'), 'worker bypasses the canonical snapshot service');
-view_check(str_contains($snapshotService, 'for transaction in reversed(transactions)'), 'backend completion does not use the last current-account transaction');
-view_check(str_contains($snapshotService, 'if party_id in preferred_by_party:'), 'backend does not explicitly prefer current-account history');
-view_check(str_contains($snapshotService, 'merged.append(fallback_by_party[party_id])'), 'backend fallback is not limited to missing current-account history');
+view_check(str_contains($worker, 'from .snapshot import build_account_snapshot'), 'worker bypasses the canonical snapshot module');
+view_check(str_contains($snapshot, 'for transaction in reversed(transactions)'), 'backend completion does not use the last current-account transaction');
+view_check(str_contains($snapshot, 'if party_id in preferred_by_party:'), 'backend does not explicitly prefer current-account history');
+view_check(str_contains($snapshot, 'merged.append(fallback_by_party[party_id])'), 'backend fallback is not limited to missing current-account history');
 
 echo "view hardening source contract tests passed\n";
