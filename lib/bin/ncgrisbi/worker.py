@@ -5,6 +5,7 @@ import json
 import sys
 from typing import Any, Dict, Mapping, Optional, Tuple
 
+from .envelope import inspect_envelope
 from .errors import ConfirmationRequiredError, MarkStateError
 from .mutation_engine import apply_mutations
 from .parser import parse_document
@@ -97,6 +98,16 @@ def _read_command(
     payload: bytes,
     password: Optional[str],
 ) -> Optional[Tuple[Dict[str, Any], bytes]]:
+    if command == "inspectEnvelope":
+        state = inspect_envelope(payload)
+        return _json_result(
+            header,
+            {
+                "compressed": state.compressed,
+                "encrypted": state.encrypted,
+            },
+        )
+
     handlers = {
         "documentInfo": lambda document: document_info(document),
         "listAccounts": lambda document: list_accounts(document),
