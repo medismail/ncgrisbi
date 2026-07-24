@@ -7,9 +7,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .envelope import inspect_envelope
 from .errors import ConfirmationRequiredError, MarkStateError
-from .mutation_engine import apply_mutations
-from .parser import parse_document
-from .protocol import (
+from .framing import (
     MAX_OPERATIONS,
     PROTOCOL_VERSION,
     ProtocolError,
@@ -18,6 +16,8 @@ from .protocol import (
     read_frame,
     read_password_fd,
 )
+from .mutation_engine import apply_mutations
+from .parser import parse_document
 from .read_service import (
     document_info,
     list_accounts,
