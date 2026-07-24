@@ -74,13 +74,22 @@ final class GrisbiProcess {
         ], $fileContent);
     }
 
+    /** @return array{compressed: bool, encrypted: bool} */
+    public function inspectEnvelope(string $fileContent): array {
+        $result = $this->requestJson([
+            'command' => 'inspectEnvelope',
+        ], $fileContent);
+        return [
+            'compressed' => (bool)($result['compressed'] ?? false),
+            'encrypted' => (bool)($result['encrypted'] ?? false),
+        ];
+    }
+
     public function checkGSBFile(string $fileContent): string {
-        $info = $this->getDocumentInfo($fileContent);
+        $envelope = $this->inspectEnvelope($fileContent);
         return json_encode([
-            'Encrypted' => !empty($info['encrypted']) ? 'True' : 'False',
-            'Compressed' => !empty($info['compressed']),
-            'FileVersion' => $info['fileVersion'] ?? null,
-            'GrisbiVersion' => $info['grisbiVersion'] ?? null,
+            'Encrypted' => $envelope['encrypted'] ? 'True' : 'False',
+            'Compressed' => $envelope['compressed'],
         ], JSON_THROW_ON_ERROR);
     }
 
