@@ -30,7 +30,22 @@ cmdline = (
     if os.path.exists('/proc/self/cmdline')
     else b''
 )
-if password != b's ecret' or b's ecret' in cmdline:
+
+command = header.get('command')
+if command == 'inspectEnvelope':
+    output = json.dumps({
+        'compressed': payload.startswith(b'\x1f\x8b'),
+        'encrypted': payload.startswith(b'Grisbi encryption v2: '),
+    }, separators=(',', ':')).encode()
+    response = {
+        'version': 1,
+        'ok': True,
+        'requestId': header.get('requestId'),
+        'changed': False,
+        'contentType': 'application/json',
+        'sha256': hashlib.sha256(output).hexdigest(),
+    }
+elif password != b's ecret' or b's ecret' in cmdline:
     response = {
         'version': 1,
         'ok': False,
@@ -41,7 +56,7 @@ if password != b's ecret' or b's ecret' in cmdline:
         },
     }
     output = b''
-elif header.get('command') == 'accountSnapshot':
+elif command == 'accountSnapshot':
     output = json.dumps({
         'account': {'id': header.get('accountId'), 'name': 'Test account'},
         'parties': [],
