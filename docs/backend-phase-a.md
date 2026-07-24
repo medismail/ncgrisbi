@@ -1,64 +1,114 @@
-# Phase A backend consolidation
+# Target backend architecture
 
-## Status
+## Compatibility boundary
 
-Phase A keeps the supported compatibility target unchanged:
+The current target remains unchanged:
 
 - desktop application target: Grisbi 1.2.2;
 - writable GSB file format: 1.2.1;
-- GSB 2.3.2 is not accepted yet.
+- GSB 2.3.2 is intentionally rejected.
 
-The purpose of this phase is to make file-format support explicit and to reduce
-the application to one active backend path before a second profile is added.
+This architecture is ready for additional format profiles, but it does not add
+or imply support for another version.
 
-## Active runtime path
+## Runtime path
 
 ```text
 Nextcloud controller/service
         |
         v
 GrisbiProcess.php
-        | framed binary protocol, password on descriptor 3
+        | framed binary protocol; password on descriptor 3
         v
 lib/bin/ncgrisbi_protocol.py
         |
         v
 ncgrisbi.worker
         +-- framing.py
-        +-- parser.py -> formats.py -> GSB_121_PROFILE
-        +-- read_service.py
-        +-- snapshot_service.py
-        +-- mutation_engine.py
-                |
-                v
-            phase6_engine.py implementation base
+        +-- envelope.py
+        +-- parser.py
+        +-- formats/
+        |     +-- base.py
+        |     +-- gsb_121.py
         +-- validator.py
+        +-- read.py
+        +-- snapshot.py -> _snapshot_core.py
+        +-- mutation.py -> _mutation_core.py
         +-- writer.py
 ```
 
-All production reads and writes now pass through the same envelope decoder,
-lossless parser, format profile, validator and response framing.
+All production commands use this path. There are no alternate protocol workers,
+legacy command-line readers or parallel mutation engines.
+
+## Final package files
+
+Public responsibility modules:
+
+- `envelope.py` — compression and encryption envelope handling;
+- `errors.py` — backend exception taxonomy;
+- `formats/` — explicit format registry and isolated version profiles;
+- `framing.py` — binary PHP/Python transport and descriptor-3 password input;
+- `model.py` — immutable parsed document and exact byte spans;
+- `mutation.py` — canonical batch mutation API and profile-owned creation;
+- `parser.py` — one lossless XML parse and top-level span scan;
+- `read.py` — JSON read models with one-pass request indexing;
+- `snapshot.py` — canonical compact editor snapshot API;
+- `validator.py` — semantic and profile-schema validation;
+- `worker.py` — command dispatch only;
+- `writer.py` — byte-preserving patch rendering.
+
+Private implementation cores:
+
+- `_mutation_core.py` — proven transfer, conflict, mark and render algorithms;
+- `_snapshot_core.py` — compact snapshot wire construction.
+
+The private cores are separated because they are large, performance-sensitive
+algorithms. They are not alternate APIs and are never imported by PHP or the
+entrypoint directly.
 
 ## Format profile boundary
 
-`FormatProfile` owns every rule that may vary by `General.File_version`:
+`formats/base.py` defines `FormatProfile`. A profile owns every rule that may
+vary by `General.File_version`:
 
 - canonical record attribute order;
-- required attributes used by schema validation;
+- required attributes used by validation;
 - section ordering used for insertion;
 - defaults for newly created records;
-- serializer behavior;
+- record serialization;
 - declared read/write support level;
 - operation capabilities.
 
-`GsbDocument` carries the profile selected from its `File_version`. The parser,
-validator, lossless writer and active mutation session consume that profile.
-Adding a future format therefore requires a new profile rather than changing a
-global version tuple and accidentally retaining 1.2.1 write rules.
+`formats/gsb_121.py` contains all 1.2.1-specific schema and defaults. The registry
+in `formats/__init__.py` is the only place that exposes supported versions.
+Parser, validator, mutation and writer code do not contain a second-version
+branch.
 
-## Unified commands
+A future profile must be added as a separate file and registered explicitly.
+Until that happens, a file declaring `2.3.2` raises
+`UnsupportedFileVersionError`.
 
-The framed worker exposes these commands:
+## Performance model
+
+The backend keeps the following hot-path properties:
+
+- one Python process per framed request;
+- one envelope decode and one XML parse per input request;
+- one batch mutation session for all submitted operations;
+- one final XML parse for semantic verification after a changed mutation;
+- no re-encryption, recompression or serialization for a no-op;
+- `Ma`-only changes patch only the attribute value;
+- read requests build lookup maps in one direct-child pass;
+- transaction list totals are calculated in the same loop that builds rows;
+- no subprocess shell and no password in command-line arguments.
+
+The read index is request-local. This avoids persistent mutable caches and keeps
+memory proportional to one open document while eliminating repeated XPath-style
+lookups and duplicate map construction.
+
+## Unified worker commands
+
+The framed worker exposes:
 
 - `inspectEnvelope`;
 - `documentInfo`;
@@ -69,82 +119,66 @@ The framed worker exposes these commands:
 - `accountSnapshot`;
 - `mutate`.
 
-`inspectEnvelope` does not decrypt the file and is safe for the password prompt
-flow. Other commands parse and validate the document before returning data or
-applying mutations.
+`inspectEnvelope` does not decrypt or parse the file. Other read commands parse
+and validate once before constructing their response. `mutate` applies the whole
+operation array atomically and returns one rendered payload.
 
-## Mutation ownership
+## Removed files
 
-`mutation_engine.py` is the production mutation facade. Its `MutationSession`
-extends the proven Phase 6 implementation but overrides all record-creation
-paths so they start from the active format profile:
-
-- explicit party creation;
-- implicit party creation from a transaction;
-- explicit category and subcategory creation;
-- implicit category and subcategory creation from a transaction;
-- normal transaction and transfer base records.
-
-Existing-record validation, transfer pairing, conflict detection, marking and
-lossless rendering remain shared with `phase6_engine.py` during the transition.
-The production worker does not import the older mutation protocol or engines.
-
-## Legacy removal and compatibility shims
-
-Removed executable legacy files:
+The following backend generations and compatibility layers are deleted:
 
 - `lib/bin/grisbi.py`;
-- `lib/bin/ncgrisbi_legacy.py`.
-
-The following modules remain temporarily because older tests or external imports
-may still reference them, but they are not on the production runtime path:
-
-- `protocol.py` — old typed mutation decoder, with framing retained separately
-  in `framing.py`;
-- `phase4_protocol.py`;
+- `lib/bin/ncgrisbi_legacy.py`;
 - `compat_engine.py`;
+- `completion_history.py`;
+- `index.py`;
+- `mutation_engine.py`;
 - `mutations.py`;
-- `phase5_protocol.py` — now only a shim to `worker.py`;
-- `completion_history.py` — now only a shim to `snapshot_service.py`.
+- `phase4_protocol.py`;
+- `phase5_protocol.py`;
+- `phase6_engine.py`;
+- `protocol.py`;
+- `read_service.py`;
+- `resolution.py`;
+- `serializer_121.py`;
+- `snapshot_service.py`.
 
-They can be deleted in a later maintenance change after downstream import usage
-has been checked. Keeping them out of the active dependency graph prevents fixes
-from being applied to the wrong engine.
+No production module or public package export refers to them.
 
-## Preserved guarantees
+## Preserved safety guarantees
 
-Phase A preserves the existing safety model:
-
-- a no-op returns the original bytes;
-- targeted marking can patch only the `Ma` value;
+- a no-op returns the original bytes exactly;
 - unknown attributes and unsupported sections are preserved;
-- file format version cannot change during rendering;
-- gzip and encryption envelope state is retained;
-- passwords are passed through descriptor 3, not command-line arguments;
-- PHP verifies framed request IDs and response SHA-256 values;
+- the declared file format cannot change during rendering;
+- gzip and encryption state is retained;
+- passwords use descriptor 3;
+- PHP verifies request IDs and response SHA-256 values;
 - shared locks protect snapshots;
-- exclusive locks and ETags protect writes.
+- exclusive locks and ETags protect writes;
+- transfer pairs, reconciled-state confirmation and quick-mark restrictions are
+  preserved.
 
 ## Tests
 
-`tests/compatibility/test_phase_a_backend.py` checks:
+The compatibility suite now checks:
 
-- profile selection and creation defaults;
-- profile-aware validation and writing;
-- globally keyed payment methods;
-- profile-owned record creation through the production mutation facade;
+- the 1.2.1 profile and creation defaults;
+- profile-aware validation and lossless writing;
+- profile-owned record creation through `mutation.py`;
 - current-account completion precedence;
-- unified framed read commands;
+- all unified read commands;
 - password-free envelope inspection;
-- absence of the removed legacy scripts;
-- isolation of the active worker from deprecated backend generations.
+- explicit rejection of GSB 2.3.2;
+- absence of every transitional module;
+- canonical runtime imports;
+- one-pass read-model source contracts.
 
-The PHP source contracts additionally verify that reads use framed commands and
-that the production process no longer has an executable legacy-wrapper path.
+## Adding another version later
 
-## Next phase
+The safe sequence remains:
 
-The next compatibility phase should add real Grisbi 3.90.1 / GSB 2.3.2 fixtures
-and a `GSB_232_PROFILE` in read-only mode. No 2.3.2 mutation capability should
-be enabled until real desktop open-save-reopen round trips pass for that exact
-operation class.
+1. collect real files written by the exact target Grisbi desktop version;
+2. add a new isolated profile under `formats/` in read-only mode;
+3. add parser, validator and snapshot fixtures;
+4. validate desktop open-save-reopen behaviour;
+5. enable one mutation capability at a time only after exact round-trip tests.
