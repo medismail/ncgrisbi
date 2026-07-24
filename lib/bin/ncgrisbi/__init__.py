@@ -1,4 +1,4 @@
-"""Lossless Grisbi 1.2.2 / GSB 1.2.1 compatibility and mutation engine."""
+"""Lossless, version-profiled Grisbi compatibility backend."""
 
 from .envelope import (
     DecodedEnvelope,
@@ -20,8 +20,25 @@ from .errors import (
     UnsupportedFileVersionError,
     ValidationError,
 )
+from .formats import (
+    FormatProfile,
+    GSB_121_PROFILE,
+    SupportLevel,
+    get_format_profile,
+    require_format_profile,
+    supported_file_versions,
+)
 from .index import GsbIndex, IndexedRecord
 from .model import ElementSpan, GsbDocument
+from .mutation_engine import (
+    MutationResult,
+    Phase6Result,
+    apply_mutations,
+    apply_phase6_operations,
+)
+# Legacy typed-operation exports remain for one compatibility cycle. They are
+# not used by the application worker; all live mutations go through
+# mutation_engine.apply_mutations.
 from .mutations import (
     CreateCategory,
     CreateParty,
@@ -30,13 +47,11 @@ from .mutations import (
     DeleteTransaction,
     MutationEngine,
     MutationOutcome,
-    MutationResult,
     UpdateTransaction,
-    apply_mutations,
 )
 from .parser import parse_document, scan_top_level_spans
-from .phase6_engine import Phase6Result, apply_phase6_operations
 from .serializer_121 import ATTRIBUTE_ORDER, serialize_element, serialize_record
+from .snapshot_service import build_account_snapshot
 from .validator import (
     ValidationIssue,
     assert_valid_document,
@@ -59,6 +74,8 @@ __all__ = [
     "ElementSpan",
     "EnvelopeError",
     "EnvelopeState",
+    "FormatProfile",
+    "GSB_121_PROFILE",
     "GsbDocument",
     "GsbError",
     "GsbIndex",
@@ -75,6 +92,7 @@ __all__ = [
     "PatchConflictError",
     "Phase6Result",
     "RecordNotFoundError",
+    "SupportLevel",
     "UnsupportedFileVersionError",
     "UpdateTransaction",
     "ValidationError",
@@ -82,14 +100,18 @@ __all__ = [
     "apply_mutations",
     "apply_phase6_operations",
     "assert_valid_document",
+    "build_account_snapshot",
     "decode_envelope",
     "encode_envelope",
     "fatal_issues",
+    "get_format_profile",
     "inspect_envelope",
     "parse_document",
+    "require_format_profile",
     "scan_top_level_spans",
     "serialize_element",
     "serialize_record",
+    "supported_file_versions",
     "validate_document",
     "validate_root",
     "warning_issues",
