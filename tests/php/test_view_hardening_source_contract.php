@@ -90,6 +90,7 @@ view_check(str_contains($responsiveEditor, 'row.isNew && row.paymentMethodSelect
 
 view_check(str_contains($phase5Protocol, 'prefer_current_account_history'), 'protocol does not normalize completion history');
 view_check(str_contains($completionHistory, 'for transaction in reversed(transactions)'), 'backend completion does not use the last current-account transaction');
-view_check(str_contains($completionHistory, 'preferred_by_party.get(party_id, fallback_by_party[party_id])'), 'backend fallback can still replace current-account history');
+view_check(str_contains($completionHistory, 'if party_id in preferred_by_party:'), 'backend does not explicitly prefer current-account history');
+view_check(str_contains($completionHistory, 'merged.append(fallback_by_party[party_id])'), 'backend fallback is not limited to missing current-account history');
 
 echo "view hardening source contract tests passed\n";
