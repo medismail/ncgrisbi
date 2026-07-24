@@ -25,7 +25,7 @@ from .read_service import (
     list_transactions,
 )
 from .resolution import NameResolutionError
-from .snapshot import build_account_snapshot
+from .snapshot_service import build_account_snapshot
 from .validator import assert_valid_document
 
 
