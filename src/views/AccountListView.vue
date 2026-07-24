@@ -114,7 +114,7 @@ function money(value, account) {
 }
 
 function accountTotalsLabel(account) {
-  return `Total: ${money(account.total?.total_amount, account)} · Checked: ${money(account.total?.total_marked_amount, account)}`
+  return `T: ${money(account.total?.total_amount, account)} · C: ${money(account.total?.total_marked_amount, account)}`
 }
 
 function pendingDiscardPrompt(context) {
