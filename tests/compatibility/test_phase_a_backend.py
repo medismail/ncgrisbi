@@ -176,3 +176,24 @@ def test_envelope_inspection_does_not_require_the_file_password() -> None:
     )
     assert header["ok"] is True
     assert json.loads(output) == {"compressed": False, "encrypted": True}
+
+
+def test_active_entrypoint_does_not_load_legacy_backend_generations() -> None:
+    entrypoint = (LIB / "ncgrisbi_protocol.py").read_text(encoding="utf-8")
+    worker = (LIB / "ncgrisbi" / "worker.py").read_text(encoding="utf-8")
+    phase5_shim = (LIB / "ncgrisbi" / "phase5_protocol.py").read_text(
+        encoding="utf-8"
+    )
+    process = (ROOT / "lib" / "Grisbi" / "GrisbiProcess.php").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from ncgrisbi.worker import main" in entrypoint
+    assert "from .framing import" in worker
+    assert "from .protocol import" not in worker
+    assert "phase4_protocol" not in worker
+    assert "compat_engine" not in worker
+    assert "from .worker import" in phase5_shim
+    assert "$this->legacyWrapperPath" not in process
+    assert not (LIB / "ncgrisbi_legacy.py").exists()
+    assert not (LIB / "grisbi.py").exists()
