@@ -11,6 +11,7 @@ if str(LIB) not in sys.path:
 
 from ncgrisbi.formats import GSB_121_PROFILE, SupportLevel, supported_file_versions
 from ncgrisbi.index import GsbIndex
+from ncgrisbi.mutation_engine import apply_mutations
 from ncgrisbi.parser import parse_document
 from ncgrisbi.snapshot_service import build_account_snapshot
 from ncgrisbi.validator import assert_valid_document
@@ -112,6 +113,43 @@ def test_parser_validator_writer_and_index_use_the_document_profile() -> None:
     changed = parse_document(output)
     assert changed.root.find("Transaction").get("Ma") == "0"
     assert changed.file_version == "1.2.1"
+
+
+def test_mutation_creation_uses_profile_defaults_and_order() -> None:
+    result = apply_mutations(
+        fixture_bytes(),
+        [
+            {"type": "createParty", "name": "Bakery"},
+            {"type": "createCategory", "name": "Bread", "kind": 1},
+            {"type": "createSubcategory", "categoryId": "2", "name": "Daily"},
+            {
+                "type": "createTransaction",
+                "accountId": "1",
+                "date": "01/03/2026",
+                "amount": "-5.00",
+                "paymentMethodId": "1",
+                "partyId": "2",
+                "categoryId": "2",
+                "subcategoryId": "1",
+            },
+        ],
+    )
+    document = parse_document(result.raw_bytes)
+    assert_valid_document(document)
+
+    party = document.root.findall("Party")[-1]
+    category = document.root.findall("Category")[-1]
+    subcategory = document.root.findall("Sub_category")[-1]
+    transaction = document.root.findall("Transaction")[-1]
+
+    assert tuple(party.attrib) == GSB_121_PROFILE.attribute_order["Party"]
+    assert tuple(category.attrib) == GSB_121_PROFILE.attribute_order["Category"]
+    assert tuple(subcategory.attrib) == GSB_121_PROFILE.attribute_order["Sub_category"]
+    assert tuple(transaction.attrib) == GSB_121_PROFILE.attribute_order["Transaction"]
+    assert transaction.get("Exb") == "0"
+    assert transaction.get("Exr") == "0.00"
+    assert transaction.get("Trt") == "0"
+    assert transaction.get("Mo") == "0"
 
 
 def test_snapshot_service_prefers_current_account_completion() -> None:
