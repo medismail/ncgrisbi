@@ -23,8 +23,8 @@ $autocomplete = file_get_contents($root . '/src/components/transactions/Transact
 $snapshotWire = file_get_contents($root . '/src/domain/snapshotWire.mjs');
 $responsiveEditor = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
 $responsiveCss = file_get_contents($root . '/src/styles/phase8a-responsive.css');
-$phase5Protocol = file_get_contents($root . '/lib/bin/ncgrisbi/phase5_protocol.py');
-$completionHistory = file_get_contents($root . '/lib/bin/ncgrisbi/completion_history.py');
+$worker = file_get_contents($root . '/lib/bin/ncgrisbi/worker.py');
+$snapshotService = file_get_contents($root . '/lib/bin/ncgrisbi/snapshot_service.py');
 
 view_check(str_contains($store, 'transactionPending'), 'shared pending transaction state is missing');
 view_check(str_contains($store, 'accountsLoading') && str_contains($store, 'accountsError'), 'account loading/error state is missing');
@@ -91,9 +91,9 @@ view_check(str_contains($responsiveEditor, 'Exact') === false, 'test wording lea
 view_check(str_contains($responsiveEditor, 'hint.targetPaymentMethodId'), 'exact transfer counterpart payment is not applied');
 view_check(str_contains($responsiveEditor, 'row.isNew && row.paymentMethodSelectionId == null'), 'implicit default payment blocks party completion');
 
-view_check(str_contains($phase5Protocol, 'prefer_current_account_history'), 'protocol does not normalize completion history');
-view_check(str_contains($completionHistory, 'for transaction in reversed(transactions)'), 'backend completion does not use the last current-account transaction');
-view_check(str_contains($completionHistory, 'if party_id in preferred_by_party:'), 'backend does not explicitly prefer current-account history');
-view_check(str_contains($completionHistory, 'merged.append(fallback_by_party[party_id])'), 'backend fallback is not limited to missing current-account history');
+view_check(str_contains($worker, 'snapshot_service import build_account_snapshot'), 'worker bypasses the canonical snapshot service');
+view_check(str_contains($snapshotService, 'for transaction in reversed(transactions)'), 'backend completion does not use the last current-account transaction');
+view_check(str_contains($snapshotService, 'if party_id in preferred_by_party:'), 'backend does not explicitly prefer current-account history');
+view_check(str_contains($snapshotService, 'merged.append(fallback_by_party[party_id])'), 'backend fallback is not limited to missing current-account history');
 
 echo "view hardening source contract tests passed\n";
