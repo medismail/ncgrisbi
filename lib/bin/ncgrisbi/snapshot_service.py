@@ -84,9 +84,10 @@ def prefer_current_account_history(
     merged: List[List[Any]] = []
     party_ids = set(fallback_by_party) | set(preferred_by_party)
     for party_id in sorted(party_ids, key=_numeric_sort_key):
-        merged.append(
-            preferred_by_party.get(party_id, fallback_by_party[party_id])
-        )
+        if party_id in preferred_by_party:
+            merged.append(preferred_by_party[party_id])
+        else:
+            merged.append(fallback_by_party[party_id])
     snapshot["H"] = merged
     return snapshot
 
