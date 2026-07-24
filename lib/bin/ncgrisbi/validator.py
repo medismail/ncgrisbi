@@ -5,9 +5,9 @@ from decimal import Decimal, InvalidOperation
 from typing import Dict, List, Optional, Tuple
 import xml.etree.ElementTree as ET
 
-from .errors import ValidationError
+from .errors import UnsupportedFileVersionError, ValidationError
+from .formats import FormatProfile, require_format_profile
 from .model import GsbDocument
-from .serializer_121 import ATTRIBUTE_ORDER
 
 
 @dataclass(frozen=True)
@@ -99,6 +99,7 @@ def _collect_subcategories(
 def validate_root(
     root: ET.Element,
     expected_file_version: str = "1.2.1",
+    profile: Optional[FormatProfile] = None,
 ) -> Tuple[ValidationIssue, ...]:
     issues: List[ValidationIssue] = []
     if root.tag != "Grisbi":
@@ -120,7 +121,30 @@ def validate_root(
             "General",
         )
 
-    for tag, names in ATTRIBUTE_ORDER.items():
+    if profile is None:
+        try:
+            profile = require_format_profile(expected_file_version)
+        except UnsupportedFileVersionError:
+            _issue(
+                issues,
+                "unsupported-file-version",
+                "No validation profile exists for GSB file version %s"
+                % expected_file_version,
+                "General",
+            )
+            return tuple(issues)
+
+    if profile.file_version != expected_file_version:
+        _issue(
+            issues,
+            "profile-version",
+            "Validation profile %s does not match expected file version %s"
+            % (profile.file_version, expected_file_version),
+            "General",
+        )
+        return tuple(issues)
+
+    for tag, names in profile.attribute_order.items():
         for element in root.findall(tag):
             missing = [name for name in names if name not in element.attrib]
             if missing:
@@ -394,7 +418,11 @@ def validate_root(
 
 
 def validate_document(document: GsbDocument) -> Tuple[ValidationIssue, ...]:
-    return validate_root(document.root, expected_file_version=document.file_version)
+    return validate_root(
+        document.root,
+        expected_file_version=document.file_version,
+        profile=document.format_profile,
+    )
 
 
 def fatal_issues(document: GsbDocument) -> Tuple[ValidationIssue, ...]:
