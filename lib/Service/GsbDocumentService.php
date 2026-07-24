@@ -14,7 +14,6 @@ use OCP\IUserSession;
 use OCP\Lock\ILockingProvider;
 
 final class GsbDocumentService {
-    private const ENCRYPTION_V2_MARKER = 'Grisbi encryption v2: ';
     private ?Folder $userFolder = null;
 
     public function __construct(
@@ -39,7 +38,8 @@ final class GsbDocumentService {
     public function getState(string $filePath): array {
         $file = $this->getFile($filePath);
         $content = $file->getContent();
-        $envelope = $this->inspectEnvelope($content);
+        $this->grisbiProcess->setPassword('');
+        $envelope = $this->grisbiProcess->inspectEnvelope($content);
         return [
             'fileId' => (int)$file->getId(),
             'path' => $this->normalizePath($filePath),
@@ -203,25 +203,5 @@ final class GsbDocumentService {
             }
         }
         return $path;
-    }
-
-    /** @return array{compressed: bool, encrypted: bool} */
-    private function inspectEnvelope(string $content): array {
-        $compressed = str_starts_with($content, "\x1f\x8b");
-        $payload = $content;
-        if ($compressed) {
-            $decoded = gzdecode($content);
-            if ($decoded === false) {
-                throw new \RuntimeException('The GSB gzip envelope is invalid.');
-            }
-            $payload = $decoded;
-        }
-        return [
-            'compressed' => $compressed,
-            'encrypted' => str_starts_with(
-                $payload,
-                self::ENCRYPTION_V2_MARKER
-            ),
-        ];
     }
 }
