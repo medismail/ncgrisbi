@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 
 from .envelope import encode_envelope
 from .errors import GsbError, PatchConflictError
-from .formats import FormatProfile
+from .formats import FormatProfile, require_format_profile
 from .model import ElementSpan, GsbDocument
 
 
@@ -28,7 +28,11 @@ class LosslessPatchWriter:
         profile: Optional[FormatProfile] = None,
     ):
         self.document = document
-        self.profile = profile or document.format_profile
+        self.profile = (
+            profile
+            or document.format_profile
+            or require_format_profile(document.file_version)
+        )
         if self.profile.file_version != document.file_version:
             raise GsbError(
                 "Writer profile %s does not match document format %s"
