@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .errors import MutationError, RecordNotFoundError
 from .model import GsbDocument
@@ -15,21 +15,89 @@ ACCOUNT_TYPES = {
     "3": "ASSET",
 }
 _NULLS = (None, "", "0", "(null)", "(NULL)")
+_ZERO_TOTAL = {
+    "total_amount": Decimal("0"),
+    "total_marked_amount": Decimal("0"),
+}
 
 
-def _by_attribute(elements: Iterable[Any], attribute: str) -> Dict[str, Any]:
-    result: Dict[str, Any] = {}
-    for element in elements:
-        value = element.get(attribute)
-        if value is not None:
-            result[value] = element
-    return result
+class _ReadContext:
+    """One-pass direct-child index used by one framed read request."""
+
+    __slots__ = (
+        "accounts",
+        "account_rows",
+        "currencies",
+        "payments",
+        "payment_rows",
+        "parties",
+        "party_rows",
+        "categories",
+        "category_rows",
+        "subcategories",
+        "subcategory_rows",
+        "transactions",
+        "transaction_rows",
+    )
+
+    def __init__(self, document: GsbDocument):
+        self.accounts: Dict[str, Any] = {}
+        self.account_rows: List[Any] = []
+        self.currencies: Dict[str, Any] = {}
+        self.payments: Dict[str, Any] = {}
+        self.payment_rows: List[Any] = []
+        self.parties: Dict[str, Any] = {}
+        self.party_rows: List[Any] = []
+        self.categories: Dict[str, Any] = {}
+        self.category_rows: List[Any] = []
+        self.subcategories: Dict[Tuple[str, str], Any] = {}
+        self.subcategory_rows: List[Any] = []
+        self.transactions: Dict[str, Any] = {}
+        self.transaction_rows: List[Any] = []
+
+        for element in document.root:
+            tag = element.tag
+            if tag == "Account":
+                key = element.get("Number")
+                if key:
+                    self.accounts[key] = element
+                    self.account_rows.append(element)
+            elif tag == "Currency":
+                key = element.get("Nb")
+                if key:
+                    self.currencies[key] = element
+            elif tag == "Payment":
+                key = element.get("Number")
+                if key:
+                    self.payments[key] = element
+                    self.payment_rows.append(element)
+            elif tag == "Party":
+                key = element.get("Nb")
+                if key:
+                    self.parties[key] = element
+                    self.party_rows.append(element)
+            elif tag == "Category":
+                key = element.get("Nb")
+                if key:
+                    self.categories[key] = element
+                    self.category_rows.append(element)
+            elif tag == "Sub_category":
+                parent = element.get("Nbc")
+                key = element.get("Nb")
+                if parent and key:
+                    self.subcategories[(parent, key)] = element
+                    self.subcategory_rows.append(element)
+            elif tag == "Transaction":
+                key = element.get("Nb")
+                if key:
+                    self.transactions[key] = element
+                    self.transaction_rows.append(element)
 
 
 def _decimal(value: Optional[str], field: str) -> Decimal:
     try:
         result = Decimal(value or "")
-    except Exception as exc:
+    except (InvalidOperation, ValueError) as exc:
         raise MutationError("%s is not a valid decimal number" % field) from exc
     if not result.is_finite():
         raise MutationError("%s must be finite" % field)
@@ -43,81 +111,43 @@ def _numeric(value: Optional[str]) -> int:
         return 0
 
 
-def _maps(document: GsbDocument) -> Dict[str, Any]:
-    root = document.root
-    accounts = _by_attribute(root.findall("Account"), "Number")
-    currencies = _by_attribute(root.findall("Currency"), "Nb")
-    banks = _by_attribute(root.findall("Bank"), "Nb")
-    payments = _by_attribute(root.findall("Payment"), "Number")
-    parties = _by_attribute(root.findall("Party"), "Nb")
-    categories = _by_attribute(root.findall("Category"), "Nb")
-    subcategories = {
-        (element.get("Nbc") or "", element.get("Nb") or ""): element
-        for element in root.findall("Sub_category")
-    }
-    transactions = _by_attribute(root.findall("Transaction"), "Nb")
-    return {
-        "accounts": accounts,
-        "currencies": currencies,
-        "banks": banks,
-        "payments": payments,
-        "parties": parties,
-        "categories": categories,
-        "subcategories": subcategories,
-        "transactions": transactions,
-    }
-
-
-def _account_totals(document: GsbDocument) -> Dict[str, Dict[str, Decimal]]:
-    totals: Dict[str, Dict[str, Decimal]] = {
-        element.get("Number"): {
-            "total_amount": Decimal("0"),
-            "total_marked_amount": Decimal("0"),
-        }
-        for element in document.root.findall("Account")
-        if element.get("Number")
-    }
-    for transaction in document.root.findall("Transaction"):
-        account_id = transaction.get("Ac") or ""
-        if account_id not in totals:
-            continue
-        amount = _decimal(
-            transaction.get("Am"),
-            "Transaction %s amount" % (transaction.get("Nb") or "?"),
-        )
-        totals[account_id]["total_amount"] += amount
-        if transaction.get("Ma", "0") == "1":
-            totals[account_id]["total_marked_amount"] += amount
-    return totals
-
-
 def document_info(document: GsbDocument) -> Dict[str, Any]:
+    profile = document.format_profile
+    if profile is None:
+        raise MutationError("The parsed document has no format profile")
     return {
         "fileVersion": document.file_version,
         "grisbiVersion": document.grisbi_version,
-        "supportLevel": document.format_profile.support_level.value,
-        "capabilities": sorted(document.format_profile.capabilities),
+        "supportLevel": profile.support_level.value,
+        "capabilities": sorted(profile.capabilities),
         "compressed": document.envelope.compressed,
         "encrypted": document.envelope.encrypted,
     }
 
 
 def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
-    maps = _maps(document)
-    totals = _account_totals(document)
-    result: List[Dict[str, Any]] = []
-    for account in document.root.findall("Account"):
-        account_id = account.get("Number")
-        if not account_id:
+    context = _ReadContext(document)
+    totals: Dict[str, Dict[str, Decimal]] = {
+        account_id: dict(_ZERO_TOTAL) for account_id in context.accounts
+    }
+    for transaction in context.transaction_rows:
+        account_id = transaction.get("Ac") or ""
+        values = totals.get(account_id)
+        if values is None:
             continue
-        currency = maps["currencies"].get(account.get("Currency") or "")
-        values = totals.get(
-            account_id,
-            {
-                "total_amount": Decimal("0"),
-                "total_marked_amount": Decimal("0"),
-            },
+        amount = _decimal(
+            transaction.get("Am"),
+            "Transaction %s amount" % (transaction.get("Nb") or "?"),
         )
+        values["total_amount"] += amount
+        if transaction.get("Ma", "0") == "1":
+            values["total_marked_amount"] += amount
+
+    result: List[Dict[str, Any]] = []
+    for account in context.account_rows:
+        account_id = account.get("Number") or ""
+        currency = context.currencies.get(account.get("Currency") or "")
+        values = totals.get(account_id, _ZERO_TOTAL)
         result.append(
             {
                 "id": account_id,
@@ -176,7 +206,7 @@ def _transfer_target_name(
 
 
 def list_parties(document: GsbDocument) -> List[Dict[str, Any]]:
-    maps = _maps(document)
+    context = _ReadContext(document)
     result: Dict[str, Dict[str, Any]] = {
         element.get("Nb"): {
             "id": element.get("Nb"),
@@ -187,19 +217,18 @@ def list_parties(document: GsbDocument) -> List[Dict[str, Any]]:
             "last_pm": "",
             "last_note": "",
         }
-        for element in document.root.findall("Party")
-        if element.get("Nb")
+        for element in context.party_rows
     }
 
-    for transaction in document.root.findall("Transaction"):
+    for transaction in context.transaction_rows:
         party_id = transaction.get("Pa") or "0"
         party = result.get(party_id)
         if party is None:
             continue
         transfer_target = _transfer_target_name(
             transaction,
-            maps["transactions"],
-            maps["accounts"],
+            context.transactions,
+            context.accounts,
         )
         if transfer_target:
             party["last_subcategory"] = transfer_target
@@ -207,9 +236,9 @@ def list_parties(document: GsbDocument) -> List[Dict[str, Any]]:
 
         category_id = transaction.get("Ca") or "0"
         subcategory_id = transaction.get("Sca") or "0"
-        category = maps["categories"].get(category_id)
-        subcategory = maps["subcategories"].get((category_id, subcategory_id))
-        payment = maps["payments"].get(transaction.get("Pn") or "0")
+        category = context.categories.get(category_id)
+        subcategory = context.subcategories.get((category_id, subcategory_id))
+        payment = context.payments.get(transaction.get("Pn") or "0")
         party.update(
             {
                 "last_amount": float(
@@ -235,44 +264,47 @@ def list_parties(document: GsbDocument) -> List[Dict[str, Any]]:
 
 
 def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
-    maps = _maps(document)
-    account = maps["accounts"].get(account_id)
+    context = _ReadContext(document)
+    account = context.accounts.get(account_id)
     if account is None:
         raise RecordNotFoundError("Account %s does not exist" % account_id)
 
     currency_id = account.get("Currency") or ""
-    currency = maps["currencies"].get(currency_id)
-    totals = _account_totals(document).get(
-        account_id,
-        {
-            "total_amount": Decimal("0"),
-            "total_marked_amount": Decimal("0"),
-        },
-    )
+    currency = context.currencies.get(currency_id)
+    total_amount = Decimal("0")
+    total_marked_amount = Decimal("0")
     rows: List[Dict[str, Any]] = []
     maximum_id = 0
 
-    for transaction in document.root.findall("Transaction"):
+    for transaction in context.transaction_rows:
         transaction_id = transaction.get("Nb") or "0"
         maximum_id = max(maximum_id, _numeric(transaction_id))
         if transaction.get("Ac") != account_id:
             continue
 
-        party = maps["parties"].get(transaction.get("Pa") or "0")
-        payment = maps["payments"].get(transaction.get("Pn") or "0")
+        amount = _decimal(
+            transaction.get("Am"),
+            "Transaction %s amount" % transaction_id,
+        )
+        total_amount += amount
+        if transaction.get("Ma", "0") == "1":
+            total_marked_amount += amount
+
+        party = context.parties.get(transaction.get("Pa") or "0")
+        payment = context.payments.get(transaction.get("Pn") or "0")
         transfer_id = transaction.get("Trt", "0")
         if transfer_id not in _NULLS:
             category_name = "Transfer"
             subcategory_name = _transfer_target_name(
                 transaction,
-                maps["transactions"],
-                maps["accounts"],
+                context.transactions,
+                context.accounts,
             )
         else:
             category_id = transaction.get("Ca") or "0"
             subcategory_id = transaction.get("Sca") or "0"
-            category = maps["categories"].get(category_id)
-            subcategory = maps["subcategories"].get(
+            category = context.categories.get(category_id)
+            subcategory = context.subcategories.get(
                 (category_id, subcategory_id)
             )
             category_name = (
@@ -290,12 +322,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
                 "TxNb": transaction_id,
                 "Date": transaction.get("Dt"),
                 "Cur": currency.get("Ico") if currency is not None else "Unknown",
-                "Am": float(
-                    _decimal(
-                        transaction.get("Am"),
-                        "Transaction %s amount" % transaction_id,
-                    )
-                ),
+                "Am": float(amount),
                 "Pa": party.get("Na") if party is not None else "Unknown",
                 "Cat": category_name,
                 "SCat": subcategory_name,
@@ -310,8 +337,8 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
 
     payment_methods = [
         {"id": element.get("Number"), "name": element.get("Name") or ""}
-        for element in document.root.findall("Payment")
-        if element.get("Number") and element.get("Account") == account_id
+        for element in context.payment_rows
+        if element.get("Account") == account_id
     ]
 
     return {
@@ -323,8 +350,17 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
             "id": currency_id,
             "name": currency.get("Ico") if currency is not None else "Unknown",
         },
-        "total_amount": float(totals["total_amount"]),
-        "total_marked_amount": float(totals["total_marked_amount"]),
+        "total_amount": float(total_amount),
+        "total_marked_amount": float(total_marked_amount),
         "payment_methods": payment_methods,
         "next_id": maximum_id + 1,
     }
+
+
+__all__ = [
+    "document_info",
+    "list_accounts",
+    "list_categories",
+    "list_parties",
+    "list_transactions",
+]
