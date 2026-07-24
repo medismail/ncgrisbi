@@ -22,6 +22,7 @@ $editor = file_get_contents($root . '/src/components/transactions/TransactionEdi
 $autocomplete = file_get_contents($root . '/src/components/transactions/TransactionAutocomplete.vue');
 $snapshotWire = file_get_contents($root . '/src/domain/snapshotWire.mjs');
 $responsiveEditor = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
+$responsiveCss = file_get_contents($root . '/src/styles/phase8a-responsive.css');
 $phase5Protocol = file_get_contents($root . '/lib/bin/ncgrisbi/phase5_protocol.py');
 $completionHistory = file_get_contents($root . '/lib/bin/ncgrisbi/completion_history.py');
 
@@ -69,6 +70,8 @@ view_check(str_contains($transactions, 'compatibility-popover'), 'compatibility 
 view_check(str_contains($transactions, "window.addEventListener('beforeunload'"), 'browser draft-loss guard is missing');
 view_check(str_contains($transactions, 'onBeforeRouteLeave'), 'route draft-loss guard is missing');
 view_check(str_contains($transactions, "store.commit('setTransactionPending'"), 'transaction view does not publish pending state');
+view_check(str_contains($responsiveCss, ':has(.search-popover)'), 'open search does not reserve header space');
+view_check(str_contains($responsiveCss, 'margin-bottom: 56px'), 'search header spacing is too small or missing');
 
 view_check(str_contains($editor, 'fieldError'), 'field-level editor error state is missing');
 view_check(str_contains($editor, 'focusInvalidField'), 'invalid transaction field is not focused');
