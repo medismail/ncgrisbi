@@ -28,6 +28,10 @@ const FLAG_TRANSFER = 4
 const FLAG_BROKEN_TRANSFER = 8
 const FLAG_CROSS_CURRENCY = 16
 
+function normalizePartyName(value) {
+  return String(value ?? '').normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase()
+}
+
 export function decodeCompactSnapshot(wire) {
   if (!wire || wire.v !== 2 || !Array.isArray(wire.a)) {
     return wire
@@ -185,6 +189,7 @@ export function decodeCompactSnapshot(wire) {
   // The compact H fallback can come from another account and older XML element
   // truthiness rules could incorrectly select it even when a local transaction exists.
   const completedParties = new Set()
+  const preferredPartyIdByName = new Map()
   for (const transaction of sortTransactionsRecentFirst(transactions)) {
     const partyId = String(transaction.partyId ?? '0')
     if (partyId === '0'
@@ -209,6 +214,44 @@ export function decodeCompactSnapshot(wire) {
         : null,
     }
     completedParties.add(partyId)
+
+    const partyNameKey = normalizePartyName(partiesById.get(partyId)?.name)
+    if (partyNameKey && !preferredPartyIdByName.has(partyNameKey)) {
+      preferredPartyIdByName.set(partyNameKey, partyId)
+    }
+  }
+
+  // Grisbi files can contain duplicate payee records with the same visible name.
+  // Mark the duplicate that has the newest current-account transaction as preferred,
+  // so selecting the displayed name cannot silently use another account's history.
+  const partyNameCounts = new Map()
+  for (const party of parties) {
+    const key = normalizePartyName(party.name)
+    partyNameCounts.set(key, (partyNameCounts.get(key) ?? 0) + 1)
+  }
+  for (const party of parties) {
+    const key = normalizePartyName(party.name)
+    const preferredPartyId = preferredPartyIdByName.get(key) ?? party.id
+    const hint = completionByPartyId[party.id]
+    const preferred = String(party.id) === String(preferredPartyId)
+    const hasCurrentHistory = String(hint?.sourceAccountId ?? '') === String(account.id)
+    party.preferredCompletionPartyId = String(preferredPartyId)
+    party.completionPriority = preferred && hasCurrentHistory
+      ? 0
+      : hasCurrentHistory
+        ? 1
+        : hint
+          ? 2
+          : 3
+
+    if ((partyNameCounts.get(key) ?? 0) > 1) {
+      const sourceAccount = accountsById.get(String(hint?.sourceAccountId ?? ''))
+      party.secondary = preferred && hasCurrentHistory
+        ? `Latest in ${account.name}`
+        : sourceAccount
+          ? `Duplicate payee · history from ${sourceAccount.name}`
+          : 'Duplicate payee · no previous transaction'
+    }
   }
 
   const preferencesWire = wire.U ?? []
