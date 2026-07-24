@@ -8,35 +8,8 @@ from xml.sax.saxutils import escape
 
 from .envelope import encode_envelope
 from .errors import GsbError, PatchConflictError
+from .formats import FormatProfile
 from .model import ElementSpan, GsbDocument
-from .serializer_121 import serialize_record
-
-# Section order used by the Grisbi 1.2.2 save path. Category and Sub_category
-# intentionally share a rank because they form one interleaved section.
-_SECTION_GROUPS = (
-    ("General",),
-    ("RGBA",),
-    ("Print",),
-    ("Currency",),
-    ("Account",),
-    ("Payment",),
-    ("Transaction",),
-    ("Scheduled",),
-    ("Party",),
-    ("Category", "Sub_category"),
-    ("Budgetary", "Sub_budgetary"),
-    ("Currency_link",),
-    ("Bank",),
-    ("Financial_year",),
-    ("Archive",),
-    ("Reconcile",),
-    ("Import_rule",),
-    ("Partial_balance",),
-    ("Bet",),
-)
-_SECTION_RANK = {
-    tag: rank for rank, group in enumerate(_SECTION_GROUPS) for tag in group
-}
 
 
 @dataclass(frozen=True)
@@ -49,8 +22,18 @@ class Patch:
 
 
 class LosslessPatchWriter:
-    def __init__(self, document: GsbDocument):
+    def __init__(
+        self,
+        document: GsbDocument,
+        profile: Optional[FormatProfile] = None,
+    ):
         self.document = document
+        self.profile = profile or document.format_profile
+        if self.profile.file_version != document.file_version:
+            raise GsbError(
+                "Writer profile %s does not match document format %s"
+                % (self.profile.file_version, document.file_version)
+            )
         self._patches: List[Patch] = []
         self._sequence = 0
 
@@ -82,7 +65,7 @@ class LosslessPatchWriter:
         self._append(span.start, span.end, replacement, "replace %s" % span.tag)
 
     def replace_record(self, span: ElementSpan, attributes: Mapping) -> None:
-        self.replace(span, serialize_record(span.tag, attributes))
+        self.replace(span, self.profile.serialize_record(span.tag, attributes))
 
     def replace_attribute(
         self,
@@ -92,9 +75,9 @@ class LosslessPatchWriter:
     ) -> None:
         """Patch one attribute value without serializing the surrounding record.
 
-        This is used by Phase 6 quick marking. A batch of checked/unchecked rows
-        changes only the one-byte ``Ma`` values and preserves every other byte,
-        including attribute order, quoting, whitespace and unknown metadata.
+        A batch of checked/unchecked rows changes only the ``Ma`` values and
+        preserves every other byte, including attribute order, quoting,
+        whitespace and metadata unknown to NCGrisbi.
         """
         raw = span.raw(self.document.xml_bytes)
         pattern = re.compile(
@@ -149,13 +132,17 @@ class LosslessPatchWriter:
                 raise GsbError("Insertion anchor does not belong to this document")
             return after.line_end, after.indent or b"\t"
 
-        if tag not in _SECTION_RANK:
-            raise GsbError("Unknown Grisbi section for insertion: %s" % tag)
-        rank = _SECTION_RANK[tag]
+        section_rank = self.profile.section_rank
+        if tag not in section_rank:
+            raise GsbError(
+                "Unknown Grisbi %s section for insertion: %s"
+                % (self.profile.file_version, tag)
+            )
+        rank = section_rank[tag]
 
         same_group = [
             span for span in self.document.spans
-            if _SECTION_RANK.get(span.tag) == rank
+            if section_rank.get(span.tag) == rank
         ]
         if same_group:
             anchor = same_group[-1]
@@ -163,7 +150,7 @@ class LosslessPatchWriter:
 
         later = [
             span for span in self.document.spans
-            if _SECTION_RANK.get(span.tag, 10 ** 6) > rank
+            if section_rank.get(span.tag, 10 ** 6) > rank
         ]
         if later:
             anchor = later[0]
@@ -178,7 +165,7 @@ class LosslessPatchWriter:
         after: Optional[ElementSpan] = None,
     ) -> None:
         position, indent = self._insertion_point(tag, after)
-        record = serialize_record(tag, attributes)
+        record = self.profile.serialize_record(tag, attributes)
         replacement = indent + record + self.document.newline
         self._append(position, position, replacement, "insert %s" % tag)
 
@@ -207,7 +194,6 @@ class LosslessPatchWriter:
         result = self.document.xml_bytes
         for patch in self._ordered_patches():
             result = result[:patch.start] + patch.replacement + result[patch.end:]
-
         try:
             root = ET.fromstring(result)
         except ET.ParseError as exc:
