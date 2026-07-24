@@ -29,7 +29,6 @@ from .formats import (
     require_format_profile,
     supported_file_versions,
 )
-from .index import GsbIndex, IndexedRecord
 from .model import ElementSpan, GsbDocument
 from .mutation import MutationResult, MutationSession, apply_mutations
 from .parser import parse_document, scan_top_level_spans
@@ -55,8 +54,6 @@ __all__ = [
     "GSB_121_PROFILE",
     "GsbDocument",
     "GsbError",
-    "GsbIndex",
-    "IndexedRecord",
     "LosslessPatchWriter",
     "MarkStateError",
     "MutationConflictError",
