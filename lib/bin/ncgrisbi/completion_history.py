@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, MutableMapping
+
+
+# Compact transaction indexes shared with snapshot.py / snapshotWire.mjs.
+_TX_ID = 0
+_TX_AMOUNT = 3
+_TX_PARTY_ID = 4
+_TX_CATEGORY_ID = 5
+_TX_SUBCATEGORY_ID = 6
+_TX_PAYMENT_METHOD_ID = 7
+_TX_NOTE = 8
+_TX_PAYMENT_REFERENCE = 9
+_TX_VOUCHER = 11
+_TX_BANK_REFERENCE = 12
+_TX_MOTHER_ID = 15
+_TX_TARGET_ACCOUNT_ID = 17
+_TX_TARGET_PAYMENT_METHOD_ID = 18
+
+
+def prefer_current_account_history(snapshot: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    """Make completion history prefer the last transaction in this account.
+
+    ``snapshot.py`` historically selected ``current_element or other_element``.
+    XML elements without children can evaluate to ``False``, so a valid current-
+    account transaction could be replaced by a transaction from another account.
+
+    The compact ``T`` list already contains the current account's transactions in
+    Grisbi document order. Rebuilding ``H`` from the end of that list provides the
+    intended behaviour: last transaction in the current account first, then the
+    existing cross-account fallback only when no current transaction exists.
+    """
+    account_wire = snapshot.get("a")
+    if not isinstance(account_wire, list) or not account_wire:
+        return snapshot
+    account_id = str(account_wire[0])
+
+    existing_rows = snapshot.get("H")
+    fallback_by_party: Dict[str, List[Any]] = {}
+    if isinstance(existing_rows, list):
+        for row in existing_rows:
+            if isinstance(row, list) and row:
+                fallback_by_party[str(row[0])] = list(row)
+
+    preferred_by_party: Dict[str, List[Any]] = {}
+    transactions = snapshot.get("T")
+    if isinstance(transactions, list):
+        for transaction in reversed(transactions):
+            if not isinstance(transaction, list) or len(transaction) <= _TX_TARGET_PAYMENT_METHOD_ID:
+                continue
+            party_id = str(transaction[_TX_PARTY_ID] or "0")
+            mother_id = transaction[_TX_MOTHER_ID]
+            if party_id in ("0", "(null)") or mother_id not in (None, "0", "(null)"):
+                continue
+            if party_id in preferred_by_party:
+                continue
+
+            preferred_by_party[party_id] = [
+                party_id,
+                account_id,
+                str(transaction[_TX_AMOUNT] or "0"),
+                str(transaction[_TX_CATEGORY_ID] or "0"),
+                str(transaction[_TX_SUBCATEGORY_ID] or "0"),
+                str(transaction[_TX_PAYMENT_METHOD_ID] or "0"),
+                transaction[_TX_NOTE],
+                transaction[_TX_PAYMENT_REFERENCE],
+                transaction[_TX_VOUCHER],
+                transaction[_TX_BANK_REFERENCE],
+                transaction[_TX_TARGET_ACCOUNT_ID],
+                transaction[_TX_TARGET_PAYMENT_METHOD_ID],
+            ]
+
+    merged: List[List[Any]] = []
+    party_ids = set(fallback_by_party) | set(preferred_by_party)
+    for party_id in sorted(party_ids, key=_numeric_sort_key):
+        merged.append(preferred_by_party.get(party_id, fallback_by_party[party_id]))
+    snapshot["H"] = merged
+    return snapshot
+
+
+def _numeric_sort_key(value: str) -> tuple[int, str]:
+    try:
+        return int(value), value
+    except (TypeError, ValueError):
+        return 2 ** 31 - 1, str(value)
