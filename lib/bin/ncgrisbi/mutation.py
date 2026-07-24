@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from ._mutation_core import (
     NULLS,
@@ -19,11 +19,71 @@ from ._mutation_core import (
 from .errors import MutationError
 from .formats import SupportLevel
 from .parser import parse_document
-from .validator import warning_issues
+from .validator import assert_valid_document, warning_issues
 
 
 class MutationSession(MutationCoreSession):
     """Canonical batch mutation session with format-owned creation defaults."""
+
+    def __init__(self, document: Any):
+        assert_valid_document(document)
+        self.document = document
+        self.accounts: Dict[str, Dict[str, str]] = {}
+        self.currencies: Dict[str, Dict[str, str]] = {}
+        self.payments: Dict[str, Dict[str, str]] = {}
+        self.parties: Dict[str, Dict[str, str]] = {}
+        self.categories: Dict[str, Dict[str, str]] = {}
+        self.subcategories: Dict[Tuple[str, str], Dict[str, str]] = {}
+        self.transactions: Dict[str, Dict[str, str]] = {}
+        self.original_transactions: Dict[str, Dict[str, str]] = {}
+        self.transaction_spans: Dict[str, Any] = {}
+
+        # Parser spans and root children have already been proven to align. Build
+        # all mutation indexes in one pass instead of scanning each tag twice.
+        for element, span in zip(document.root, document.spans):
+            tag = element.tag
+            attributes = dict(element.attrib)
+            if tag == "Account":
+                key = element.get("Number")
+                if key:
+                    self.accounts[key] = attributes
+            elif tag == "Currency":
+                key = element.get("Nb")
+                if key:
+                    self.currencies[key] = attributes
+            elif tag == "Payment":
+                key = element.get("Number")
+                if key:
+                    self.payments[key] = attributes
+            elif tag == "Party":
+                key = element.get("Nb")
+                if key:
+                    self.parties[key] = attributes
+            elif tag == "Category":
+                key = element.get("Nb")
+                if key:
+                    self.categories[key] = attributes
+            elif tag == "Sub_category":
+                parent = element.get("Nbc")
+                key = element.get("Nb")
+                if parent and key:
+                    self.subcategories[(parent, key)] = attributes
+            elif tag == "Transaction":
+                key = element.get("Nb")
+                if key:
+                    self.transactions[key] = attributes
+                    self.original_transactions[key] = dict(attributes)
+                    self.transaction_spans[key] = span
+
+        self.next_party = self._next_id(self.parties)
+        self.next_category = self._next_id(self.categories)
+        self.next_transaction = self._next_id(self.transactions)
+        self.next_subcategories: Dict[str, int] = {}
+        self.new_records: List[Tuple[str, Dict[str, str]]] = []
+        self.new_transaction_ids: List[str] = []
+        self.deleted_transactions: set[str] = set()
+        self.structural_touched: set[str] = set()
+        self.outcomes: List[Dict[str, Any]] = []
 
     def _new_record(self, tag: str, **values: Any) -> Dict[str, str]:
         profile = self.document.format_profile
