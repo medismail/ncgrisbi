@@ -21,7 +21,7 @@ class IndexedRecord:
 class GsbIndex:
     accounts: Dict[str, IndexedRecord]
     currencies: Dict[str, IndexedRecord]
-    payments: Dict[Tuple[str, str], IndexedRecord]
+    payments: Dict[str, IndexedRecord]
     transactions: Dict[str, IndexedRecord]
     parties: Dict[str, IndexedRecord]
     categories: Dict[str, IndexedRecord]
@@ -31,7 +31,7 @@ class GsbIndex:
     def build(cls, document: GsbDocument) -> "GsbIndex":
         accounts: Dict[str, IndexedRecord] = {}
         currencies: Dict[str, IndexedRecord] = {}
-        payments: Dict[Tuple[str, str], IndexedRecord] = {}
+        payments: Dict[str, IndexedRecord] = {}
         transactions: Dict[str, IndexedRecord] = {}
         parties: Dict[str, IndexedRecord] = {}
         categories: Dict[str, IndexedRecord] = {}
@@ -48,10 +48,11 @@ class GsbIndex:
                 if key is not None:
                     currencies[key] = record
             elif element.tag == "Payment":
-                account = element.get("Account")
-                number = element.get("Number")
-                if account is not None and number is not None:
-                    payments[(account, number)] = record
+                # Payment.Number is globally unique in Grisbi. Account is a
+                # selection/filtering property, not part of the identifier.
+                key = element.get("Number")
+                if key is not None:
+                    payments[key] = record
             elif element.tag == "Transaction":
                 key = element.get("Nb")
                 if key is not None:
