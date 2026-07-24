@@ -95,11 +95,15 @@ const sortedItems = computed(() => {
         normalized,
         sourceIndex,
         matchRank: query ? (prefix ? 0 : contains ? 1 : 3) : 2,
+        completionRank: Number.isFinite(Number(item.completionPriority))
+          ? Number(item.completionPriority)
+          : 100000,
         recentRank: recentRank.has(String(item.id)) ? recentRank.get(String(item.id)) : 100000,
       }
     })
     .filter(candidate => !query || candidate.matchRank < 3)
     .sort((left, right) => left.matchRank - right.matchRank
+      || left.completionRank - right.completionRank
       || left.recentRank - right.recentRank
       || left.sourceIndex - right.sourceIndex)
 })
@@ -172,12 +176,19 @@ function clearValue() {
   nextTick(() => inputElement.value?.focus())
 }
 
+function preferredItem(item) {
+  const preferredId = item?.preferredCompletionPartyId
+  if (preferredId == null) return item
+  return props.items.find(candidate => String(candidate.id) === String(preferredId)) ?? item
+}
+
 function choose(option) {
   if (option.create) {
     emit('create', String(props.modelValue ?? '').trim())
   } else {
-    emit('update:modelValue', option.item.name)
-    emit('select', option.item)
+    const item = preferredItem(option.item)
+    emit('update:modelValue', item.name)
+    emit('select', item)
   }
   open.value = false
 }
