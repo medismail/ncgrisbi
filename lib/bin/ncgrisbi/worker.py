@@ -16,25 +16,22 @@ from .framing import (
     read_frame,
     read_password_fd,
 )
-from .mutation_engine import apply_mutations
+from .mutation import apply_mutations
 from .parser import parse_document
-from .read_service import (
+from .read import (
     document_info,
     list_accounts,
     list_categories,
     list_parties,
     list_transactions,
 )
-from .resolution import NameResolutionError
-from .snapshot_service import build_account_snapshot
+from .snapshot import build_account_snapshot
 from .validator import assert_valid_document
 
 
 def error_response(exc: Exception, request_id: Any = None) -> Dict[str, Any]:
     response = base_error_response(exc, request_id=request_id)
-    if isinstance(exc, NameResolutionError):
-        response["error"]["code"] = "name-resolution-error"
-    elif isinstance(exc, ConfirmationRequiredError):
+    if isinstance(exc, ConfirmationRequiredError):
         response["error"]["code"] = "confirmation-required"
         response["error"]["reason"] = exc.reason
         response["error"]["transactionIds"] = list(exc.transaction_ids)
