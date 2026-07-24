@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from .envelope import EnvelopeState
+from .formats import FormatProfile
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class GsbDocument:
     spans: Tuple[ElementSpan, ...]
     file_version: str
     grisbi_version: str
+    format_profile: FormatProfile
 
     def spans_for(self, tag: str) -> Tuple[ElementSpan, ...]:
         return tuple(span for span in self.spans if span.tag == tag)
