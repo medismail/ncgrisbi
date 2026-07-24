@@ -5,10 +5,11 @@ import xml.etree.ElementTree as ET
 from typing import List, Optional, Sequence, Tuple
 
 from .envelope import decode_envelope
-from .errors import GsbError, UnsupportedFileVersionError
+from .errors import GsbError
+from .formats import require_format_profile, supported_file_versions
 from .model import ElementSpan, GsbDocument
 
-SUPPORTED_FILE_VERSIONS = ("1.2.1",)
+SUPPORTED_FILE_VERSIONS = supported_file_versions()
 _NAME_RE = re.compile(rb"[A-Za-z_][A-Za-z0-9_.:-]*")
 _ATTRIBUTE_RE = re.compile(rb"\s([A-Za-z_][A-Za-z0-9_.:-]*)\s*=")
 
@@ -160,7 +161,7 @@ def _parse_xml(xml_bytes: bytes) -> ET.Element:
 def parse_document(
     raw_bytes: bytes,
     password: Optional[str] = None,
-    accepted_file_versions: Sequence[str] = SUPPORTED_FILE_VERSIONS,
+    accepted_file_versions: Optional[Sequence[str]] = SUPPORTED_FILE_VERSIONS,
 ) -> GsbDocument:
     decoded = decode_envelope(raw_bytes, password=password)
     root = _parse_xml(decoded.xml_bytes)
@@ -181,10 +182,10 @@ def parse_document(
 
     file_version = general.get("File_version", "")
     grisbi_version = general.get("Grisbi_version", "")
-    if accepted_file_versions and file_version not in accepted_file_versions:
-        raise UnsupportedFileVersionError(
-            "Unsupported GSB file version: %s" % (file_version or "missing")
-        )
+    format_profile = require_format_profile(
+        file_version,
+        accepted_file_versions=accepted_file_versions,
+    )
 
     return GsbDocument(
         raw_bytes=bytes(raw_bytes),
@@ -194,4 +195,5 @@ def parse_document(
         spans=spans,
         file_version=file_version,
         grisbi_version=grisbi_version,
+        format_profile=format_profile,
     )
