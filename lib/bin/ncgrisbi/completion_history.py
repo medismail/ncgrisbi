@@ -4,7 +4,6 @@ from typing import Any, Dict, List, MutableMapping
 
 
 # Compact transaction indexes shared with snapshot.py / snapshotWire.mjs.
-_TX_ID = 0
 _TX_AMOUNT = 3
 _TX_PARTY_ID = 4
 _TX_CATEGORY_ID = 5
@@ -19,7 +18,9 @@ _TX_TARGET_ACCOUNT_ID = 17
 _TX_TARGET_PAYMENT_METHOD_ID = 18
 
 
-def prefer_current_account_history(snapshot: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+def prefer_current_account_history(
+    snapshot: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     """Make completion history prefer the last transaction in this account.
 
     ``snapshot.py`` historically selected ``current_element or other_element``.
@@ -47,11 +48,18 @@ def prefer_current_account_history(snapshot: MutableMapping[str, Any]) -> Mutabl
     transactions = snapshot.get("T")
     if isinstance(transactions, list):
         for transaction in reversed(transactions):
-            if not isinstance(transaction, list) or len(transaction) <= _TX_TARGET_PAYMENT_METHOD_ID:
+            if (
+                not isinstance(transaction, list)
+                or len(transaction) <= _TX_TARGET_PAYMENT_METHOD_ID
+            ):
                 continue
             party_id = str(transaction[_TX_PARTY_ID] or "0")
             mother_id = transaction[_TX_MOTHER_ID]
-            if party_id in ("0", "(null)") or mother_id not in (None, "0", "(null)"):
+            if party_id in ("0", "(null)") or mother_id not in (
+                None,
+                "0",
+                "(null)",
+            ):
                 continue
             if party_id in preferred_by_party:
                 continue
@@ -74,7 +82,10 @@ def prefer_current_account_history(snapshot: MutableMapping[str, Any]) -> Mutabl
     merged: List[List[Any]] = []
     party_ids = set(fallback_by_party) | set(preferred_by_party)
     for party_id in sorted(party_ids, key=_numeric_sort_key):
-        merged.append(preferred_by_party.get(party_id, fallback_by_party[party_id]))
+        if party_id in preferred_by_party:
+            merged.append(preferred_by_party[party_id])
+        else:
+            merged.append(fallback_by_party[party_id])
     snapshot["H"] = merged
     return snapshot
 
