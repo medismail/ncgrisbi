@@ -41,6 +41,7 @@ const wire = {
   H: [
     ['1', '2', '999.00', '0', '0', '2', 'Wrong account', null, null, null, null],
     ['2', '2', '-12.00', '0', '0', '2', 'Fallback remains available', null, null, null, null],
+    ['3', '2', '888.00', '0', '0', '2', 'Duplicate from other account', null, null, null, null],
   ],
   U: [],
   W: [],
@@ -55,9 +56,18 @@ assert.equal(preferred.paymentMethodId, '1')
 assert.equal(preferred.targetPaymentMethodId, '4')
 assert.equal(snapshot.completionByPartyId['2'].sourceAccountId, '2')
 
+const preferredParty = snapshot.parties.find(item => item.id === '1')
+const duplicateParty = snapshot.parties.find(item => item.id === '3')
+assert.equal(preferredParty.preferredCompletionPartyId, '1')
+assert.equal(preferredParty.completionPriority, 0)
+assert.equal(duplicateParty.preferredCompletionPartyId, '1')
+assert.ok(duplicateParty.completionPriority > preferredParty.completionPriority)
+assert.match(preferredParty.secondary, /Latest in Current/u)
+assert.match(duplicateParty.secondary, /history from Savings/u)
+
 const draft = newResponsiveDraft(snapshot, 'new-1', '07/16/2026')
 assert.equal(draft.paymentMethodName, 'Default source method')
-setSelectedItem(draft, 'party', snapshot.parties[0])
+setSelectedItem(draft, 'party', preferredParty)
 const trace = applyPartyCompletionTrace(draft, snapshot)
 
 assert.ok(trace)
