@@ -31,7 +31,10 @@ class GsbDocument:
     spans: Tuple[ElementSpan, ...]
     file_version: str
     grisbi_version: str
-    format_profile: FormatProfile
+    # Parsed production documents always carry a profile. The optional default
+    # preserves compatibility for older tests/integrations that instantiate the
+    # dataclass directly and let validator/writer code resolve by file_version.
+    format_profile: Optional[FormatProfile] = None
 
     def spans_for(self, tag: str) -> Tuple[ElementSpan, ...]:
         return tuple(span for span in self.spans if span.tag == tag)
