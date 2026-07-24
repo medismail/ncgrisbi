@@ -7,26 +7,29 @@ use OCA\NCGrisbi\Exception\GrisbiProtocolException;
 
 final class GrisbiProcess {
     private string $pythonBinary;
-    private string $legacyWrapperPath;
     private string $protocolScriptPath;
     private ?string $password = null;
     private int $processTimeoutSeconds = 120;
 
     public function __construct() {
         $this->pythonBinary = 'python3';
-        $this->legacyWrapperPath = __DIR__ . '/../bin/ncgrisbi_legacy.py';
         $this->protocolScriptPath = __DIR__ . '/../bin/ncgrisbi_protocol.py';
     }
 
+    /**
+     * Keep the historical factory signature for test compatibility. The legacy
+     * wrapper argument is intentionally ignored: every command now uses the
+     * framed worker and descriptor 3 for passwords.
+     */
     public static function createForTesting(
         string $pythonBinary,
         string $legacyWrapperPath,
         string $protocolScriptPath,
         int $processTimeoutSeconds = 10
     ): self {
+        unset($legacyWrapperPath);
         $instance = new self();
         $instance->pythonBinary = $pythonBinary;
-        $instance->legacyWrapperPath = $legacyWrapperPath;
         $instance->protocolScriptPath = $protocolScriptPath;
         $instance->processTimeoutSeconds = $processTimeoutSeconds;
         return $instance;
@@ -34,32 +37,6 @@ final class GrisbiProcess {
 
     public function setPassword(string $password): void {
         $this->password = $password !== '' ? $password : null;
-    }
-
-    /**
-     * Compatibility entry point for the existing read-only API.
-     *
-     * @param list<string> $parameters
-     */
-    public function run(
-        array $parameters = [],
-        $inputfile = null,
-        ?callable $inputHandler = null
-    ): string {
-        if ($inputHandler !== null) {
-            throw new \InvalidArgumentException(
-                'Interactive process prompts are disabled; use descriptor 3.'
-            );
-        }
-        $command = array_merge(
-            [$this->pythonBinary, $this->legacyWrapperPath],
-            array_map(static fn($value): string => (string)$value, $parameters)
-        );
-        return $this->runProcess(
-            $command,
-            is_string($inputfile) ? $inputfile : '',
-            $this->password
-        );
     }
 
     /**
@@ -84,46 +61,84 @@ final class GrisbiProcess {
 
     /** @return array<string, mixed> */
     public function getAccountSnapshot(string $accountId, string $fileContent): array {
-        [$header, $payload] = $this->requestProtocol([
+        return $this->requestJson([
             'command' => 'accountSnapshot',
             'accountId' => $accountId,
         ], $fileContent);
-        if (($header['contentType'] ?? null) !== 'application/json') {
-            throw new \RuntimeException('Python returned an unexpected snapshot content type.');
-        }
-        $snapshot = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-        if (!is_array($snapshot)) {
-            throw new \RuntimeException('Python returned an invalid account snapshot.');
-        }
-        return $snapshot;
+    }
+
+    /** @return array<string, mixed> */
+    public function getDocumentInfo(string $fileContent): array {
+        return $this->requestJson([
+            'command' => 'documentInfo',
+        ], $fileContent);
     }
 
     public function checkGSBFile(string $fileContent): string {
-        return $this->run(['--check-file', '-'], $fileContent);
+        $info = $this->getDocumentInfo($fileContent);
+        return json_encode([
+            'Encrypted' => !empty($info['encrypted']) ? 'True' : 'False',
+            'Compressed' => !empty($info['compressed']),
+            'FileVersion' => $info['fileVersion'] ?? null,
+            'GrisbiVersion' => $info['grisbiVersion'] ?? null,
+        ], JSON_THROW_ON_ERROR);
     }
 
     public function getAccounts(string $fileContent): string {
-        return $this->run(['--list-accounts', '-'], $fileContent);
+        return $this->requestJsonPayload([
+            'command' => 'listAccounts',
+        ], $fileContent);
     }
 
     public function getParties(string $fileContent): string {
-        return $this->run(['--list-parties', '-'], $fileContent);
+        return $this->requestJsonPayload([
+            'command' => 'listParties',
+        ], $fileContent);
     }
 
     public function getCategories(string $fileContent): string {
-        return $this->run(['--list-categories', '-'], $fileContent);
+        return $this->requestJsonPayload([
+            'command' => 'listCategories',
+        ], $fileContent);
     }
 
     public function getTransactions(string $accountId, string $fileContent): string {
-        return $this->run(['--list-transactions', $accountId, '-'], $fileContent);
+        return $this->requestJsonPayload([
+            'command' => 'listTransactions',
+            'accountId' => $accountId,
+        ], $fileContent);
     }
 
-    /** @deprecated The raw transaction API is disabled by ApiController. */
+    /** @deprecated Raw-attribute mutation is permanently disabled. */
     public function addTransactions(string $transactionDataJson, string $fileContent): string {
-        return $this->run(
-            ['--add-transaction', '--transaction-data', $transactionDataJson, '-'],
-            $fileContent
+        unset($transactionDataJson, $fileContent);
+        throw new \LogicException(
+            'Raw Grisbi mutation is disabled; use typed mutation operations.'
         );
+    }
+
+    /**
+     * @param array<string, mixed> $request
+     * @return array<string, mixed>
+     */
+    private function requestJson(array $request, string $fileContent): array {
+        $payload = $this->requestJsonPayload($request, $fileContent);
+        $decoded = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($decoded)) {
+            throw new \RuntimeException('Python returned an invalid JSON object.');
+        }
+        return $decoded;
+    }
+
+    /** @param array<string, mixed> $request */
+    private function requestJsonPayload(array $request, string $fileContent): string {
+        [$header, $payload] = $this->requestProtocol($request, $fileContent);
+        if (($header['contentType'] ?? null) !== 'application/json') {
+            throw new \RuntimeException(
+                'Python returned an unexpected response content type.'
+            );
+        }
+        return $payload;
     }
 
     /**
