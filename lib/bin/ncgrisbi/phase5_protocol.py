@@ -5,6 +5,7 @@ import json
 import sys
 from typing import Any, Dict, Mapping, Optional, Tuple
 
+from .completion_history import prefer_current_account_history
 from .errors import ConfirmationRequiredError, MarkStateError
 from .parser import parse_document
 from .phase6_engine import apply_phase6_operations
@@ -74,7 +75,9 @@ def execute_request(
     if command == "accountSnapshot":
         document = parse_document(payload, password=password)
         assert_valid_document(document)
-        snapshot = build_account_snapshot(document, _account_id(header))
+        snapshot = prefer_current_account_history(
+            build_account_snapshot(document, _account_id(header))
+        )
         output = json.dumps(
             snapshot,
             ensure_ascii=False,
