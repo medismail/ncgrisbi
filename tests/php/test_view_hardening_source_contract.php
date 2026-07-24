@@ -22,6 +22,8 @@ $editor = file_get_contents($root . '/src/components/transactions/TransactionEdi
 $autocomplete = file_get_contents($root . '/src/components/transactions/TransactionAutocomplete.vue');
 $snapshotWire = file_get_contents($root . '/src/domain/snapshotWire.mjs');
 $responsiveEditor = file_get_contents($root . '/src/domain/responsiveEditor.mjs');
+$phase5Protocol = file_get_contents($root . '/lib/bin/ncgrisbi/phase5_protocol.py');
+$completionHistory = file_get_contents($root . '/lib/bin/ncgrisbi/completion_history.py');
 
 view_check(str_contains($store, 'transactionPending'), 'shared pending transaction state is missing');
 view_check(str_contains($store, 'accountsLoading') && str_contains($store, 'accountsError'), 'account loading/error state is missing');
@@ -74,12 +76,20 @@ view_check(str_contains($editor, ':aria-invalid="fieldInvalid'), 'native transac
 view_check(str_contains($editor, ':error="fieldInvalid'), 'autocomplete fields do not receive validation state');
 view_check(str_contains($autocomplete, 'errorMessage'), 'autocomplete error message support is missing');
 view_check(str_contains($autocomplete, "defineExpose({ focus })"), 'autocomplete cannot be focused after validation');
+view_check(str_contains($autocomplete, 'completionRank'), 'autocomplete does not rank current-account completion first');
+view_check(str_contains($autocomplete, 'preferredCompletionPartyId'), 'duplicate payee selection does not resolve to the preferred current-account ID');
 
 view_check(str_contains($snapshotWire, 'sortTransactionsRecentFirst(transactions)'), 'same-account completion is not recent-first');
 view_check(str_contains($snapshotWire, 'sourceAccountId: account.id'), 'same-account completion does not override cross-account fallback');
 view_check(str_contains($snapshotWire, 'targetPaymentMethodId'), 'transfer counterpart payment is missing from completion hints');
+view_check(str_contains($snapshotWire, 'preferredPartyIdByName'), 'duplicate payees are not grouped by visible name');
+view_check(str_contains($snapshotWire, 'preferredCompletionPartyId'), 'preferred current-account payee ID is not exposed');
 view_check(str_contains($responsiveEditor, 'Exact') === false, 'test wording leaked into production completion code');
 view_check(str_contains($responsiveEditor, 'hint.targetPaymentMethodId'), 'exact transfer counterpart payment is not applied');
 view_check(str_contains($responsiveEditor, 'row.isNew && row.paymentMethodSelectionId == null'), 'implicit default payment blocks party completion');
 
- echo "view hardening source contract tests passed\n";
+view_check(str_contains($phase5Protocol, 'prefer_current_account_history'), 'protocol does not normalize completion history');
+view_check(str_contains($completionHistory, 'for transaction in reversed(transactions)'), 'backend completion does not use the last current-account transaction');
+view_check(str_contains($completionHistory, 'preferred_by_party.get(party_id, fallback_by_party[party_id])'), 'backend fallback can still replace current-account history');
+
+echo "view hardening source contract tests passed\n";
