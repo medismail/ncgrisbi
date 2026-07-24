@@ -242,7 +242,9 @@ def require_format_profile(
     file_version: str,
     accepted_file_versions: Optional[Sequence[str]] = None,
 ) -> FormatProfile:
-    if accepted_file_versions is not None and file_version not in accepted_file_versions:
+    # Preserve the historical parser contract: an empty accepted-version
+    # sequence means "use the backend registry", not "accept no versions".
+    if accepted_file_versions and file_version not in accepted_file_versions:
         raise UnsupportedFileVersionError(
             "Unsupported GSB file version: %s" % (file_version or "missing")
         )
