@@ -106,7 +106,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.password-page { display: grid; place-items: center; min-height: min(560px, 100%); padding: 20px; box-sizing: border-box; }
+.password-page { display: grid; place-items: center; min-height: min(560px, 100%); padding: 20px; box-sizing: border-box; margin: auto; }
 .password-card { display: grid; gap: 20px; width: min(460px, 100%); padding: 22px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); box-shadow: 0 6px 22px rgb(0 0 0 / 10%); box-sizing: border-box; }
 .password-card header { display: flex; align-items: center; gap: 13px; }
 .password-card h1, .password-card p { margin: 0; }

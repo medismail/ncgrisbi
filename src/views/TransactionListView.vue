@@ -909,9 +909,6 @@ watch(() => route.params.id, async newId => {
 .detail-line { grid-column: 2 / -1; display: flex; gap: 8px 18px; min-width: 0; padding-top: 6px; opacity: .78; font-size: .9rem; }
 .mode-detailed .row-content { min-height: 88px; align-content: center; }
 .empty-state { padding: 28px; text-align: center; opacity: .7; }
-:global(body.theme--dark) .amount-cell.credit,
-:global(body[data-theme-dark]) .amount-cell.credit,
-:global(html[data-theme-dark]) .amount-cell.credit { color: #8ce99a; }
 @media (prefers-color-scheme: dark) {
   .amount-cell.credit { color: #8ce99a; }
 }

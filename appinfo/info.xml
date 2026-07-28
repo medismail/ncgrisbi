@@ -2,7 +2,7 @@
 <info>
   <id>ncgrisbi</id>
   <name>NCGrisbi</name>
-  <version>0.3.0</version>
+  <version>0.3.1</version>
   <summary>Nextcloud Grisbi Account Manager.</summary>
   <description><![CDATA[# Nextcloud Grisbi Account Manager:
 - * Open gsb file
@@ -16,7 +16,7 @@
   <website>https://github.com/medismail/ncgrisbi</website>
   <bugs>https://github.com/medismail/ncgrisbi/issues</bugs>
   <dependencies>
-    <nextcloud min-version="29" max-version="33"/>
+    <nextcloud min-version="32" max-version="34"/>
   </dependencies>
   <namespace>NCGrisbi</namespace>
   <category>tools</category>
