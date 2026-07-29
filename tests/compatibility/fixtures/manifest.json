@@ -1,0 +1,20 @@
+{
+  "target_application": "Grisbi 1.2.2",
+  "target_file_version": "1.2.1",
+  "fixtures": [
+    {
+      "path": "grisbi-1.2.2-basic.gsb",
+      "kind": "plain-xml",
+      "provenance": "Synthetic canonical fixture derived from the Grisbi 1.2.2 serializers in upstream_version_1_2_2/src/gsb_file_save.c",
+      "contains": [
+        "two accounts",
+        "three normal transactions",
+        "two parties",
+        "credit and debit categories",
+        "parent-scoped subcategories",
+        "payment methods",
+        "preservation-sensitive transaction metadata"
+      ]
+    }
+  ]
+}

@@ -10,12 +10,19 @@ return [
         ['name' => 'page#typepass', 'url' => '/typepass', 'verb' => 'GET'],
         ['name' => 'page#file', 'url' => '/file', 'verb' => 'GET'],
 
-        // API endpoints
+        // Legacy read-only API endpoints
         ['name' => 'api#get_accounts', 'url' => '/api/accounts', 'verb' => 'POST'],
         ['name' => 'api#get_transactions', 'url' => '/api/account/{accountId}', 'verb' => 'POST'],
-        ['name' => 'api#save_transaction', 'url' => '/api/savetransaction', 'verb' => 'POST'],
         ['name' => 'api#get_parties', 'url' => '/api/parties', 'verb' => 'POST'],
         ['name' => 'api#get_categories', 'url' => '/api/categories', 'verb' => 'POST'],
         ['name' => 'api#check_encrypted', 'url' => '/api/checkencrypted', 'verb' => 'GET'],
-    ]
+
+        // Typed editor snapshot and concurrency-safe mutation API
+        ['name' => 'editor#account', 'url' => '/api/editor/account/{accountId}', 'verb' => 'POST'],
+        ['name' => 'api#document_state', 'url' => '/api/document', 'verb' => 'POST'],
+        ['name' => 'api#mutate', 'url' => '/api/mutations', 'verb' => 'POST'],
+
+        // Retained only to return HTTP 410 to pre-Phase-3 clients.
+        ['name' => 'api#save_transaction', 'url' => '/api/savetransaction', 'verb' => 'POST'],
+    ],
 ];

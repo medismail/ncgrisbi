@@ -7,7 +7,7 @@ appstore_package_name=$(appstore_build_directory)/$(app_name)
 npm=$(shell which npm 2> /dev/null)
 version=$(shell grep \<version\> appinfo/info.xml|cut -f2 -d\>|cut -f1 -d\<)
 
-all: build
+all: dist
 
 .PHONY: build
 build: build-dep check
@@ -26,7 +26,6 @@ dist: build
 	rm -rf ./js ./css
 	cp -r dist/js js
 	cp -r dist/css css
-	make appstore
 
 # Builds the source package for the app store, ignores php and js tests
 .PHONY: appstore
@@ -35,6 +34,7 @@ appstore:
 	mkdir -p $(appstore_build_directory)
 	tar cvzf $(appstore_package_name)_$(version).tar.gz \
 	--exclude-vcs \
+	--exclude="../$(app_name)/docs" \
 	--exclude="../$(app_name)/dist" \
 	--exclude="../$(app_name)/tests" \
 	--exclude="../$(app_name)/Makefile" \
@@ -58,8 +58,12 @@ appstore:
 	--exclude="../$(app_name)/webpack.js" \
 	--exclude="../$(app_name)/stylelint.config.js" \
 	--exclude="../$(app_name)/vue.config.js" \
+    --exclude="../$(app_name)/pytest.ini" \
+    --exclude="../$(app_name)/requirements-dev.txt" \
 	--exclude="../$(app_name)/src" \
+	--exclude="../$(app_name)/todo" \
 	--exclude="../$(app_name)/lib/bin/__pycache__" \
+    --exclude="../$(app_name)/lib/bin/ncgrisbi/__pycache__" \
 	../$(app_name)
 
 .PHONY: fixcode

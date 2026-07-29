@@ -1,6 +1,6 @@
 {
   "name": "ncgrisbi",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Nextcloud Grisbi App",
   "main": "src/main.js",
   "directories": {
@@ -45,6 +45,7 @@
   "dependencies": {
     "@nextcloud/axios": "^2.5.1",
     "@nextcloud/browserslist-config": "^3.0.0",
+    "@nextcloud/dialogs": "^7.0.0",
     "@nextcloud/files": "^4.0.0",
     "@nextcloud/l10n": "^2.2.0",
     "@nextcloud/router": "^3.0.0",
@@ -53,6 +54,7 @@
     "babel-loader-exclude-node-modules-except": "^1.2.1",
     "path-browserify": "^1.0.1",
     "resolve-cwd": "^3.0.0",
+    "stream-browserify": "^3.0.0",
     "vue": "^3.2.0",
     "vue-material-design-icons": "^5.1.2",
     "vue-router": "^4.3.0",

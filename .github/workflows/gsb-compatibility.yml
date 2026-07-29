@@ -1,0 +1,87 @@
+name: GSB compatibility contract
+
+on:
+  push:
+    branches:
+      - main
+      - 'agent/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run Python compatibility contract
+        run: python -m pytest
+
+      - name: Lint PHP sources and tests
+        run: find lib appinfo tests/php -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Check transaction JavaScript modules
+        run: |
+          node --check src/domain/snapshotWire.mjs
+          node --check src/domain/transactionEditor.mjs
+          node --check src/domain/responsiveEditor.mjs
+          node --check src/domain/transactionOrdering.mjs
+          node --check src/domain/transactionSearch.mjs
+          node --check src/services/gsbApi.js
+          node --check src/store.js
+
+      - name: Test Phase 5 frontend mutation planning
+        run: node tests/frontend/test_phase5_editor.mjs
+
+      - name: Test Phase 8A responsive batch planning
+        run: node tests/frontend/test_phase8a_ui.mjs
+
+      - name: Test Phase 8A same-account completion
+        run: node tests/frontend/test_phase8a_completion.mjs
+
+      - name: Test Phase 8A transaction ordering
+        run: node tests/frontend/test_phase8a_ordering.mjs
+
+      - name: Test Phase 8A transaction search
+        run: node tests/frontend/test_phase8a_search.mjs
+
+      - name: Test binary process protocol
+        run: php tests/php/test_phase3_process.php
+
+      - name: Test ETag document service
+        run: php tests/php/test_phase3_document_service.php
+
+      - name: Test Phase 3 source contract
+        run: php tests/php/test_phase3_source_contract.php
+
+      - name: Test Phase 5 source contract
+        run: php tests/php/test_phase5_source_contract.php
+
+      - name: Test Phase 8A source contract
+        run: php tests/php/test_phase8a_source_contract.php
+
+      - name: Test view hardening source contract
+        run: php tests/php/test_view_hardening_source_contract.php

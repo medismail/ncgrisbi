@@ -1,0 +1,51 @@
+name: Backend compatibility
+
+on:
+  push:
+    paths:
+      - 'lib/bin/**'
+      - 'lib/Grisbi/**'
+      - 'lib/Service/**'
+      - 'tests/compatibility/**'
+      - 'tests/php/**'
+      - '.github/workflows/backend-compatibility.yml'
+  pull_request:
+    paths:
+      - 'lib/bin/**'
+      - 'lib/Grisbi/**'
+      - 'lib/Service/**'
+      - 'tests/compatibility/**'
+      - 'tests/php/**'
+      - '.github/workflows/backend-compatibility.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python test dependencies
+        run: python -m pip install --disable-pip-version-check pytest pycryptodomex
+
+      - name: Compile backend modules
+        run: python -m compileall -q lib/bin/ncgrisbi lib/bin/ncgrisbi_protocol.py lib/bin/gsb_decode.py
+
+      - name: Run Python compatibility tests
+        run: python -m pytest -q tests/compatibility
+
+      - name: Run PHP backend contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in tests/php/test_*.php; do
+            php "$test_file"
+          done

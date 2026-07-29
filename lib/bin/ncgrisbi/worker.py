@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+from typing import Any, Dict, Mapping, Optional, Tuple
+
+from .envelope import inspect_envelope
+from .errors import ConfirmationRequiredError, MarkStateError
+from .framing import (
+    MAX_OPERATIONS,
+    PROTOCOL_VERSION,
+    ProtocolError,
+    encode_frame,
+    error_response as base_error_response,
+    read_frame,
+    read_password_fd,
+)
+from .mutation import apply_mutations
+from .parser import parse_document
+from .read import (
+    document_info,
+    list_accounts,
+    list_categories,
+    list_parties,
+    list_transactions,
+)
+from .snapshot import build_account_snapshot
+from .validator import assert_valid_document
+
+
+def error_response(exc: Exception, request_id: Any = None) -> Dict[str, Any]:
+    response = base_error_response(exc, request_id=request_id)
+    if isinstance(exc, ConfirmationRequiredError):
+        response["error"]["code"] = "confirmation-required"
+        response["error"]["reason"] = exc.reason
+        response["error"]["transactionIds"] = list(exc.transaction_ids)
+    elif isinstance(exc, MarkStateError):
+        response["error"]["code"] = "marked-state-protected"
+    return response
+
+
+def _account_id(header: Mapping[str, Any]) -> str:
+    value = header.get("accountId")
+    if not isinstance(value, str):
+        raise ProtocolError("accountId must be a canonical positive identifier")
+    try:
+        number = int(value)
+    except ValueError:
+        raise ProtocolError("accountId must be a canonical positive identifier")
+    if number <= 0 or str(number) != value:
+        raise ProtocolError("accountId must be a canonical positive identifier")
+    return value
+
+
+def _raw_operations(header: Mapping[str, Any]) -> list:
+    operations = header.get("operations")
+    if not isinstance(operations, list):
+        raise ProtocolError("operations must be a JSON array")
+    if not operations:
+        raise ProtocolError("operations cannot be empty")
+    if len(operations) > MAX_OPERATIONS:
+        raise ProtocolError("Mutation batch exceeds the operation limit")
+    for operation in operations:
+        if not isinstance(operation, Mapping):
+            raise ProtocolError("Every mutation operation must be a JSON object")
+    return operations
+
+
+def _json_result(
+    header: Mapping[str, Any],
+    value: Any,
+) -> Tuple[Dict[str, Any], bytes]:
+    output = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return (
+        {
+            "version": PROTOCOL_VERSION,
+            "ok": True,
+            "requestId": header.get("requestId"),
+            "changed": False,
+            "contentType": "application/json",
+            "sha256": hashlib.sha256(output).hexdigest(),
+        },
+        output,
+    )
+
+
+def _read_command(
+    command: str,
+    header: Mapping[str, Any],
+    payload: bytes,
+    password: Optional[str],
+) -> Optional[Tuple[Dict[str, Any], bytes]]:
+    if command == "inspectEnvelope":
+        state = inspect_envelope(payload)
+        return _json_result(
+            header,
+            {
+                "compressed": state.compressed,
+                "encrypted": state.encrypted,
+            },
+        )
+
+    handlers = {
+        "documentInfo": lambda document: document_info(document),
+        "listAccounts": lambda document: list_accounts(document),
+        "listParties": lambda document: list_parties(document),
+        "listCategories": lambda document: list_categories(document),
+        "listTransactions": lambda document: list_transactions(
+            document,
+            _account_id(header),
+        ),
+        "accountSnapshot": lambda document: build_account_snapshot(
+            document,
+            _account_id(header),
+        ),
+    }
+    handler = handlers.get(command)
+    if handler is None:
+        return None
+    document = parse_document(payload, password=password)
+    assert_valid_document(document)
+    return _json_result(header, handler(document))
+
+
+def execute_request(
+    header: Mapping[str, Any],
+    payload: bytes,
+    password: Optional[str],
+) -> Tuple[Dict[str, Any], bytes]:
+    if header.get("version") != PROTOCOL_VERSION:
+        raise ProtocolError("Unsupported protocol version")
+
+    command = header.get("command")
+    if not isinstance(command, str):
+        raise ProtocolError("command must be text")
+
+    read_result = _read_command(command, header, payload, password)
+    if read_result is not None:
+        return read_result
+
+    if command != "mutate":
+        raise ProtocolError("Unsupported protocol command")
+
+    result = apply_mutations(
+        payload,
+        _raw_operations(header),
+        password=password,
+    )
+    outcomes = []
+    for expanded_index, outcome in enumerate(result.outcomes):
+        mapped = dict(outcome)
+        mapped["expandedOperationIndex"] = expanded_index
+        outcomes.append(mapped)
+
+    output = result.raw_bytes
+    return (
+        {
+            "version": PROTOCOL_VERSION,
+            "ok": True,
+            "requestId": header.get("requestId"),
+            "changed": output != payload,
+            "sha256": hashlib.sha256(output).hexdigest(),
+            "outcomes": outcomes,
+            "warnings": list(result.warnings),
+            "changedRecords": result.changed_records,
+        },
+        output,
+    )
+
+
+def main() -> int:
+    request_id = None
+    try:
+        header, payload = read_frame(sys.stdin.buffer)
+        request_id = header.get("requestId")
+        password = read_password_fd(3)
+        response_header, response_payload = execute_request(
+            header,
+            payload,
+            password,
+        )
+    except Exception as exc:
+        response_header = error_response(exc, request_id=request_id)
+        response_payload = b""
+
+    sys.stdout.buffer.write(encode_frame(response_header, response_payload))
+    sys.stdout.buffer.flush()
+    return 0
