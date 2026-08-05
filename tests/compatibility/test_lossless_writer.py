@@ -117,6 +117,6 @@ def test_overlapping_replacements_are_rejected() -> None:
 
 
 def test_unsupported_file_version_is_rejected() -> None:
-    raw = FIXTURE.read_bytes().replace(b'File_version="1.2.1"', b'File_version="2.0.0"')
+    raw = FIXTURE.read_bytes().replace(b'File_version="1.2.1"', b'File_version="2.3.2"')
     with pytest.raises(UnsupportedFileVersionError):
         parse_document(raw)

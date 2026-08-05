@@ -25,8 +25,8 @@ def minimal_file(file_version: str, grisbi_version: str) -> bytes:
     ).encode("utf-8")
 
 
-def test_phase_a_keeps_the_121_write_target() -> None:
-    assert supported_file_versions() == ("1.2.1",)
+def test_phase_a_keeps_supported_write_targets() -> None:
+    assert supported_file_versions() == ("1.2.1", "2.0.0")
     document = parse_document(
         minimal_file("1.2.1", "1.2.2"),
         accepted_file_versions=(),
@@ -34,6 +34,16 @@ def test_phase_a_keeps_the_121_write_target() -> None:
     assert document.file_version == "1.2.1"
     assert document.format_profile is not None
     assert document.format_profile.file_version == "1.2.1"
+
+
+def test_phase_a_accepts_200_write_target() -> None:
+    document = parse_document(
+        minimal_file("2.0.0", "3.0.4"),
+        accepted_file_versions=(),
+    )
+    assert document.file_version == "2.0.0"
+    assert document.format_profile is not None
+    assert document.format_profile.file_version == "2.0.0"
 
 
 def test_phase_a_does_not_enable_232_implicitly() -> None:

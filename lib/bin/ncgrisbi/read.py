@@ -147,7 +147,11 @@ def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
     for account in context.account_rows:
         account_id = account.get("Number") or ""
         currency = context.currencies.get(account.get("Currency") or "")
-        values = totals.get(account_id, _ZERO_TOTAL)
+        values = dict(totals.get(account_id, _ZERO_TOTAL))
+        values["total_amount"] += _decimal(
+            account.get("Initial_balance", "0"),
+            "Account Initial balance",
+        )
         result.append(
             {
                 "id": account_id,
@@ -271,7 +275,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
 
     currency_id = account.get("Currency") or ""
     currency = context.currencies.get(currency_id)
-    total_amount = Decimal("0")
+    total_amount = _decimal(account.get("Initial_balance", "0"), "Account Initial balance")
     total_marked_amount = Decimal("0")
     rows: List[Dict[str, Any]] = []
     maximum_id = 0
