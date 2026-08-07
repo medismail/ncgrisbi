@@ -97,6 +97,7 @@ export function decodeCompactSnapshot(wire) {
     },
     totalAmount: String(wire.a[8] ?? '0'),
     totalMarkedAmount: String(wire.a[9] ?? '0'),
+    initialBalance: String(wire.a[10] ?? '0'),
   }
 
   const transactions = (wire.T ?? []).map(item => {

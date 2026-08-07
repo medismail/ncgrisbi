@@ -75,7 +75,7 @@ def fixture_bytes() -> bytes:
 
 
 def test_profile_owns_the_121_schema_and_creation_defaults() -> None:
-    assert supported_file_versions() == ("1.2.1",)
+    assert supported_file_versions() == ("1.2.1", "2.0.0")
     assert GSB_121_PROFILE.support_level is SupportLevel.READ_WRITE
     assert GSB_121_PROFILE.attribute_order["Transaction"][0:3] == (
         "Ac",

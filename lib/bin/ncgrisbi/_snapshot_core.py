@@ -227,7 +227,8 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
 
     transaction_elements = list(root.findall("Transaction"))
     transactions_by_id = _index_by_attribute(transaction_elements, "Nb")
-    total = Decimal("0")
+    initial_balance = _decimal(account.get("Initial_balance", "0"), "Account Initial balance")
+    total = initial_balance
     marked_total = Decimal("0")
     transactions: List[List[Any]] = []
     for element in transaction_elements:
@@ -372,6 +373,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
             precision,
             _format_decimal(total, precision),
             _format_decimal(marked_total, precision),
+            _format_decimal(initial_balance, precision),
         ],
         "A": accounts,
         "P": parties,

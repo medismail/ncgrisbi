@@ -7,8 +7,10 @@ from ..errors import UnsupportedFileVersionError
 from .base import FormatProfile, SupportLevel
 from .gsb_121 import ATTRIBUTE_ORDER as GSB_121_ATTRIBUTE_ORDER
 from .gsb_121 import PROFILE as GSB_121_PROFILE
+from .gsb_200 import ATTRIBUTE_ORDER as GSB_200_ATTRIBUTE_ORDER
+from .gsb_200 import PROFILE as GSB_200_PROFILE
 
-_PROFILES = MappingProxyType({GSB_121_PROFILE.file_version: GSB_121_PROFILE})
+_PROFILES = MappingProxyType({GSB_121_PROFILE.file_version: GSB_121_PROFILE, GSB_200_PROFILE.file_version: GSB_200_PROFILE})
 
 
 def supported_file_versions() -> Tuple[str, ...]:
@@ -41,6 +43,8 @@ __all__ = [
     "FormatProfile",
     "GSB_121_ATTRIBUTE_ORDER",
     "GSB_121_PROFILE",
+    "GSB_200_ATTRIBUTE_ORDER",
+    "GSB_200_PROFILE",
     "SupportLevel",
     "get_format_profile",
     "require_format_profile",

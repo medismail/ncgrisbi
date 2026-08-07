@@ -52,6 +52,8 @@ __all__ = [
     "FormatProfile",
     "GSB_121_ATTRIBUTE_ORDER",
     "GSB_121_PROFILE",
+    "GSB_200_ATTRIBUTE_ORDER",
+    "GSB_200_PROFILE",
     "GsbDocument",
     "GsbError",
     "LosslessPatchWriter",

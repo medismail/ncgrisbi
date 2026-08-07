@@ -2,14 +2,16 @@
 
 ## Compatibility boundary
 
-The current target remains unchanged:
+Supported write targets:
 
-- desktop application target: Grisbi 1.2.2;
-- writable GSB file format: 1.2.1;
-- GSB 2.3.2 is intentionally rejected.
+- GSB 1.2.1 (desktop application target: Grisbi 1.2.2);
+- GSB 2.0.0 (desktop application target: Grisbi 3.0.4).
 
-This architecture is ready for additional format profiles, but it does not add
-or imply support for another version.
+GSB 2.3.2 and other unlisted versions are intentionally rejected.
+
+Format profiles live under `formats/` (`gsb_121.py`, `gsb_200.py`). Adding a
+new version requires a new profile module and an update to the version-gate
+contract tests.
 
 ## Runtime path
 
@@ -30,6 +32,7 @@ ncgrisbi.worker
         +-- formats/
         |     +-- base.py
         |     +-- gsb_121.py
+        |     +-- gsb_200.py
         +-- validator.py
         +-- read.py
         +-- snapshot.py -> _snapshot_core.py
@@ -162,13 +165,13 @@ No production module or public package export refers to them.
 
 The compatibility suite now checks:
 
-- the 1.2.1 profile and creation defaults;
+- the 1.2.1 and 2.0.0 profiles and creation defaults;
 - profile-aware validation and lossless writing;
 - profile-owned record creation through `mutation.py`;
 - current-account completion precedence;
 - all unified read commands;
 - password-free envelope inspection;
-- explicit rejection of GSB 2.3.2;
+- explicit rejection of GSB 2.3.2 and other unlisted versions;
 - absence of every transitional module;
 - canonical runtime imports;
 - one-pass read-model source contracts.
