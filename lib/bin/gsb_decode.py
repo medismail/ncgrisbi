@@ -1,5 +1,7 @@
-#from Crypto.Cipher import DES
 from Cryptodome.Cipher import DES
+from Cryptodome.Cipher import AES
+from Cryptodome.Util.Padding import pad, unpad
+from hashlib import sha256
 from getpass import getpass
 import struct
 import os
@@ -7,7 +9,68 @@ import os
 V2_MARKER = b"Grisbi encryption v2: "
 V2_MARKER_SIZE = len(V2_MARKER)
 
+V3_MARKER = b"Grisbi encryption v3: "
+V3_MARKER_SIZE = len(V3_MARKER)
+
 password = None
+encryption_version = None
+
+IV = b"1234567887654321"
+
+def encrypt_v3(password, file_content):
+    """
+    Python equivalent of the C encrypt_v3().
+
+    Args:
+        password: str or bytes
+        file_content: bytes
+
+    Returns:
+        bytes: V3_MARKER + AES-128-CBC-encrypted(V3_MARKER + file_content)
+    """
+    if isinstance(password, str):
+        password = password.encode("utf-8")
+    if isinstance(file_content, str):
+        file_content = file_content.encode("utf-8")
+
+    # to_encrypt_content = V3_MARKER + original content
+    to_encrypt_content = V3_MARKER + file_content
+
+    # SHA-256(password), first 16 bytes used for AES-128 key
+    key = sha256(password).digest()[:16]
+
+    # AES-128-CBC with PKCS#7 padding
+    cipher = AES.new(key, AES.MODE_CBC, IV)
+    encrypted_content = cipher.encrypt(pad(to_encrypt_content, AES.block_size))
+
+    # output_content = clear marker + encrypted payload
+    output_content = V3_MARKER + encrypted_content
+    return output_content
+
+def decrypt_v3(password, encrypted_blob):
+    if isinstance(password, str):
+        password = password.encode("utf-8")
+    if isinstance(encrypted_blob, str):
+        encrypted_blob = encrypted_blob.encode("utf-8")
+
+    if not encrypted_blob.startswith(V3_MARKER):
+        raise ValueError("Missing V3 marker at beginning of encrypted blob")
+
+    encrypted_content = encrypted_blob[V3_MARKER_SIZE:]
+    if len(encrypted_content) == 0 or len(encrypted_content) % AES.block_size != 0:
+        raise ValueError("Invalid V3 encrypted content length")
+
+    key = sha256(password).digest()[:16]
+    cipher = AES.new(key, AES.MODE_CBC, IV)
+    decrypted = unpad(cipher.decrypt(encrypted_content), AES.block_size)
+
+    if not decrypted.startswith(V3_MARKER):
+        raise ValueError("Decrypted content does not contain inner V3 marker")
+
+    # Remove inner marker
+    output_buf = decrypted[V3_MARKER_SIZE:]
+
+    return output_buf
 
 def align_to_8_bytes(length):
     return (length + 7) & (~7)
@@ -51,10 +114,16 @@ def des_string_to_key(password):
 
     return key
 
+#def bitwise_xor_bytes(a, b):
+#    """Safely XOR two byte strings."""
+#    result_int = int.from_bytes(a, byteorder="big") ^ int.from_bytes(b, byteorder="big")
+#    return result_int.to_bytes(max(len(a), len(b)), byteorder="big")
+
 def bitwise_xor_bytes(a, b):
     """Safely XOR two byte strings."""
-    result_int = int.from_bytes(a, byteorder="big") ^ int.from_bytes(b, byteorder="big")
-    return result_int.to_bytes(max(len(a), len(b)), byteorder="big")
+    if len(a) != len(b):
+        raise ValueError("Inputs must have same length")
+    return bytes(x ^ y for x, y in zip(a, b))
 
 def apply_des_checksum(password, key):
     """Apply DES checksum to key.
@@ -147,7 +216,14 @@ def decrypt_v2(password, file_content):
     
     if not file_content or len(file_content) < V2_MARKER_SIZE:
         raise ValueError("Invalid encrypted file: too short")
-    
+
+    if not file_content.startswith(V2_MARKER):
+        raise ValueError("Missing V2 marker")
+
+    ciphertext = file_content[V2_MARKER_SIZE:]
+    if len(ciphertext) == 0 or len(ciphertext) % 8 != 0:
+        raise ValueError("Invalid V2 encrypted content length")
+
     # Ensure the password is properly formatted
     key_bytes = des_string_to_key(password)
     iv = set_odd_parity(key_bytes)
@@ -156,8 +232,7 @@ def decrypt_v2(password, file_content):
     key = DES.new(key_bytes, DES.MODE_CBC, iv)
 
     # Create a temporary buffer that will hold the decrypted data without the first marker
-    decrypted_len = len(file_content) - V2_MARKER_SIZE
-    decrypted_buf = key.decrypt(file_content[V2_MARKER_SIZE:])
+    decrypted_buf = key.decrypt(ciphertext)
 
     # If the password was correct, the second marker should appear in the first few bytes of the decrypted content
     if decrypted_buf[:V2_MARKER_SIZE] != V2_MARKER:
@@ -169,51 +244,56 @@ def decrypt_v2(password, file_content):
     return output_buf
 
 def check_encrypt_gsb(file_content):
-    """Check if file is encrypted with DES v2 format."""
+    """Check if file is encrypted with DES v2 or AES v3 format."""
     if not file_content or len(file_content) < V2_MARKER_SIZE:
         return False
-    return file_content[:V2_MARKER_SIZE] == V2_MARKER
+    return file_content[:V2_MARKER_SIZE] == V2_MARKER or file_content[:V3_MARKER_SIZE] == V3_MARKER
 
 def read_gsb_file(file_path):
     """Read GSB file from disk.
     
     Security: Validates file exists and handles errors gracefully.
     """
-    global password
-    
+    global password, encryption_version
+
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
-    
-    try:
-        with open(file_path, 'rb') as f:
-            file_content = f.read()
-    except IOError as e:
-        raise IOError(f"Error reading file {file_path}: {e}")
-    
-    if file_content[:V2_MARKER_SIZE] != V2_MARKER:
-        return file_content
-    else:
+
+    with open(file_path, 'rb') as f:
+        file_content = f.read()
+
+    if file_content[:V2_MARKER_SIZE] == V2_MARKER:
+        encryption_version = 2
         password = getpass("Enter password for encrypted GSB file: ")
         return decrypt_v2(password, file_content)
+    elif file_content[:V3_MARKER_SIZE] == V3_MARKER:
+        encryption_version = 3
+        password = getpass("Enter password for encrypted GSB file: ")
+        return decrypt_v3(password, file_content)
+    else:
+        encryption_version = None
+        password = None
+        return file_content
 
 def write_gsb_file(file_path, file_content):
     """Write GSB file to disk.
     
     Security: Validates file path and handles I/O errors.
     """
+    global password, encryption_version
+
     try:
-        if (password):
-            # Encrypt if password was used
-            encrypted_content = encrypt_v2(password, file_content)
+        if password:
+            if encryption_version == 3:
+                encrypted_content = encrypt_v3(password, file_content)
+            else:
+                encrypted_content = encrypt_v2(password, file_content)
+
             with open(file_path, 'wb') as f:
                 f.write(encrypted_content)
         else:
-            # Write as plaintext
-            if isinstance(file_content, bytes):
-                with open(file_path, 'wb') as f:
-                    f.write(file_content)
-            else:
-                with open(file_path, 'w') as f:
-                    f.write(file_content)
+            mode = 'wb' if isinstance(file_content, bytes) else 'w'
+            with open(file_path, mode) as f:
+                f.write(file_content)
     except IOError as e:
         raise IOError(f"Error writing file {file_path}: {e}")

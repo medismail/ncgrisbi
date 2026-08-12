@@ -16,7 +16,7 @@ FIXTURE = ROOT / "tests" / "compatibility" / "fixtures" / "grisbi-1.2.2-basic.gs
 
 def test_real_grisbi_v2_codec_round_trip() -> None:
     plain = FIXTURE.read_bytes()
-    for state in (EnvelopeState(False, True), EnvelopeState(True, True)):
+    for state in (EnvelopeState(False, True, 2), EnvelopeState(True, True, 2)):
         raw = encode_envelope(plain, state, password="phase1-test")
         assert inspect_envelope(raw) == state
 
