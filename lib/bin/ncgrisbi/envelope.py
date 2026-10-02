@@ -9,12 +9,15 @@ from .errors import EnvelopeError, PasswordRequiredError
 
 GZIP_MAGIC = b"\x1f\x8b"
 V2_MARKER = b"Grisbi encryption v2: "
+V3_MARKER = b"Grisbi encryption v3: "
 
 
 @dataclass(frozen=True)
 class EnvelopeState:
     compressed: bool = False
     encrypted: bool = False
+    # 0 = unspecified (legacy callers default to v2); 2 = DES v2; 3 = AES-128-CBC v3.
+    version: int = 0
 
 
 @dataclass(frozen=True)
@@ -47,10 +50,19 @@ def inspect_envelope(raw_bytes: bytes) -> EnvelopeState:
     compressed = payload.startswith(GZIP_MAGIC)
     if compressed:
         payload = _decompress(payload)
-
+    if payload.startswith(V2_MARKER):
+        version = 2
+        encrypted = True
+    elif payload.startswith(V3_MARKER):
+        version = 3
+        encrypted = True
+    else:
+        version = 0
+        encrypted = False
     return EnvelopeState(
         compressed=compressed,
-        encrypted=payload.startswith(V2_MARKER),
+        encrypted=encrypted,
+        version=version,
     )
 
 
@@ -64,9 +76,19 @@ def decode_envelope(raw_bytes: bytes, password: Optional[str] = None) -> Decoded
     if state.encrypted:
         if not password:
             raise PasswordRequiredError("A password is required for this encrypted GSB file")
+        # Treat an unspecified version (0) as legacy v2 so existing
+        # EnvelopeState(False, True) callers keep working.
+        version = state.version or 2
         try:
-            payload = _load_crypto_module().decrypt_v2(password, payload)
+            if version == 2:
+                payload = _load_crypto_module().decrypt_v2(password, payload)
+            elif version == 3:
+                payload = _load_crypto_module().decrypt_v3(password, payload)
+            else:
+                raise EnvelopeError("Unsupported encryption version: %r" % state.version)
         except PasswordRequiredError:
+            raise
+        except EnvelopeError:
             raise
         except Exception as exc:
             raise EnvelopeError("Unable to decrypt GSB file") from exc
@@ -81,14 +103,24 @@ def encode_envelope(
 ) -> bytes:
     payload = bytes(xml_bytes)
 
-    # Grisbi 1.2.2 writes XML -> encryption -> gzip. Read performs the exact
+    # Grisbi writes XML -> encryption -> gzip. Read performs the exact
     # reverse order, which also allows gzip-wrapped encrypted files to be found.
     if state.encrypted:
         if not password:
             raise PasswordRequiredError("A password is required to write this encrypted GSB file")
+        # Treat an unspecified version (0) as legacy v2 so existing
+        # EnvelopeState(False, True) callers keep working.
+        version = state.version or 2
         try:
-            payload = _load_crypto_module().encrypt_v2(password, payload)
+            if version == 2:
+                payload = _load_crypto_module().encrypt_v2(password, payload)
+            elif version == 3:
+                payload = _load_crypto_module().encrypt_v3(password, payload)
+            else:
+                raise EnvelopeError("Unsupported encryption version: %r" % state.version)
         except PasswordRequiredError:
+            raise
+        except EnvelopeError:
             raise
         except Exception as exc:
             raise EnvelopeError("Unable to encrypt GSB file") from exc

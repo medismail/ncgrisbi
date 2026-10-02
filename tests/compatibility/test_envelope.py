@@ -53,21 +53,21 @@ def test_plain_and_gzip_envelopes_are_detected() -> None:
 
 def test_gzip_wrapped_encrypted_file_uses_reverse_read_order() -> None:
     plain = FIXTURE.read_bytes()
-    encrypted = encode_envelope(plain, EnvelopeState(False, True), password="secret")
+    encrypted = encode_envelope(plain, EnvelopeState(False, True, 2), password="secret")
     wrapped = gzip.compress(encrypted, mtime=123)
 
-    assert inspect_envelope(wrapped) == EnvelopeState(True, True)
+    assert inspect_envelope(wrapped) == EnvelopeState(True, True, 2)
     decoded = decode_envelope(wrapped, password="secret")
     assert decoded.xml_bytes == plain
-    assert decoded.state == EnvelopeState(True, True)
+    assert decoded.state == EnvelopeState(True, True, 2)
 
 
 def test_noop_returns_original_compressed_or_encrypted_bytes() -> None:
     plain = FIXTURE.read_bytes()
     variants = [
         gzip.compress(plain, mtime=123),
-        encode_envelope(plain, EnvelopeState(False, True), password="secret"),
-        encode_envelope(plain, EnvelopeState(True, True), password="secret"),
+        encode_envelope(plain, EnvelopeState(False, True, 2), password="secret"),
+        encode_envelope(plain, EnvelopeState(True, True, 2), password="secret"),
     ]
 
     for raw in variants:
@@ -77,7 +77,7 @@ def test_noop_returns_original_compressed_or_encrypted_bytes() -> None:
 
 def test_mutation_preserves_envelope_type() -> None:
     plain = FIXTURE.read_bytes()
-    raw = encode_envelope(plain, EnvelopeState(True, True), password="secret")
+    raw = encode_envelope(plain, EnvelopeState(True, True, 2), password="secret")
     document = parse_document(raw, password="secret")
     writer = LosslessPatchWriter(document)
     writer.insert_record(
@@ -93,7 +93,7 @@ def test_mutation_preserves_envelope_type() -> None:
     )
 
     output = writer.render(password="secret")
-    assert inspect_envelope(output) == EnvelopeState(True, True)
+    assert inspect_envelope(output) == EnvelopeState(True, True, 2)
     reopened = parse_document(output, password="secret")
     assert reopened.root.findall("Party")[-1].get("Na") == "Envelope test"
 
