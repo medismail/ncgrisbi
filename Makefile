@@ -64,6 +64,7 @@ appstore:
 	--exclude="../$(app_name)/todo" \
 	--exclude="../$(app_name)/lib/bin/__pycache__" \
     --exclude="../$(app_name)/lib/bin/ncgrisbi/__pycache__" \
+    --exclude="../$(app_name)/AGENTS.md" \
 	../$(app_name)
 
 .PHONY: fixcode

@@ -267,12 +267,13 @@
 
       <TransactionEditorPanel
         v-if="editorDraft"
+        :key="editorRowKey"
         v-model:draft="editorDraft"
         :snapshot="snapshot"
         :recent-selections="recentSelections"
         :auto-focus-party="editorDraft.isNew"
-        @apply="applyActiveDraft(false)"
-        @apply-add="applyActiveDraft(true)"
+        @apply="applyActiveDraft(false, $event)"
+        @apply-add="applyActiveDraft(true, $event)"
         @cancel="cancelActiveEditor"
         @recent="rememberSelection"
       />
@@ -483,11 +484,12 @@ async function cancelActiveEditor() {
   if (key) await focusRow(key)
 }
 
-async function applyActiveDraft(addAnother) {
+async function applyActiveDraft(addAnother, draftPayload) {
   const key = editorRowKey.value
   const target = rows.value.find(item => item.key === key)
-  if (!target || !editorDraft.value) return
-  applyEditorDraft(target, editorDraft.value)
+  const draft = draftPayload || editorDraft.value
+  if (!target || !draft) return
+  applyEditorDraft(target, draft)
   clearValidationFor(target)
   closeEditorState()
   if (addAnother) addTransaction()
