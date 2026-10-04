@@ -318,20 +318,6 @@ watch(
   { deep: true, flush: 'sync' },
 )
 
-watch(
-  () => props.draft,
-  newDraft => {
-    if (!newDraft || newDraft.key === localDraft.key) return
-    Object.assign(localDraft, clone(newDraft))
-    completionTrace.value = null
-    autoFilledFields.value = []
-    fieldError.field = ''
-    fieldError.message = ''
-    editorError.value = ''
-  },
-  { deep: true },
-)
-
 const title = computed(() => localDraft.isNew ? 'New transaction' : 'Edit transaction')
 const isTransfer = computed(() => normalizeName(localDraft.categoryName) === normalizeName(TRANSFER_CATEGORY))
 const categoryChoices = computed(() => [
