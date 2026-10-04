@@ -21,6 +21,10 @@ $responsiveCss = file_get_contents($root . '/src/styles/phase8a-responsive.css')
 phase8a_check(str_contains($view, 'DynamicScroller'), 'responsive list lost virtual scrolling');
 phase8a_check(str_contains($view, 'TransactionEditorPanel'), 'single responsive editor is missing');
 phase8a_check(str_contains($view, 'v-model:draft="editorDraft"'), 'editor draft does not use Vue two-way binding');
+phase8a_check(str_contains($view, ':key="editorRowKey"'), 'transaction editor is not remounted when switching rows');
+phase8a_check(str_contains($view, '@apply="applyActiveDraft(false, $event)"'), 'editor apply does not use the emitted draft payload');
+phase8a_check(str_contains($view, '@apply-add="applyActiveDraft(true, $event)"'), 'multi-entry apply does not use the emitted draft payload');
+phase8a_check(!str_contains($panel, '() => props.draft'), 'redundant deep draft watcher was reintroduced');
 phase8a_check(str_contains($view, 'class="action-menu"'), 'compact transaction action menu is missing');
 phase8a_check(str_contains($view, "runAction('add'"), 'action menu does not add transactions');
 phase8a_check(str_contains($view, "runAction('search'"), 'action menu does not open transaction search');
