@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import {
+  applyEditorDraft,
   applyPartyCompletionTrace,
   buildResponsiveMutationOperations,
+  cloneEditorDraft,
   createResponsiveDrafts,
   hasResponsivePendingChanges,
   newResponsiveDraft,
@@ -159,6 +161,23 @@ operations = buildResponsiveMutationOperations([firstNew, secondNew], snapshot)
 assert.deepEqual(operations.map(operation => operation.type), ['createTransaction', 'createTransaction'])
 assert.equal(hasResponsivePendingChanges([firstNew, secondNew]), true)
 assert.equal(pendingChangeSummary([firstNew, secondNew]).created, 2)
+
+// Regression: applying one editor payload must only update its matching row,
+// then a second editor payload must remain independent.
+const sequentialRows = createResponsiveDrafts(snapshot)
+const firstEditorDraft = cloneEditorDraft(sequentialRows[0])
+firstEditorDraft.note = 'Edited transaction 10'
+applyEditorDraft(sequentialRows[0], firstEditorDraft)
+assert.equal(sequentialRows[0].note, 'Edited transaction 10')
+assert.equal(sequentialRows[1].note, null)
+assert.equal(sequentialRows[0].locallyApplied, true)
+
+const secondEditorDraft = cloneEditorDraft(sequentialRows[1])
+secondEditorDraft.note = 'Edited transaction 11'
+applyEditorDraft(sequentialRows[1], secondEditorDraft)
+assert.equal(sequentialRows[0].note, 'Edited transaction 10')
+assert.equal(sequentialRows[1].note, 'Edited transaction 11')
+assert.equal(sequentialRows[1].locallyApplied, true)
 
 const completion = newResponsiveDraft(snapshot, 'new-3', '07/12/2026')
 setSelectedItem(completion, 'party', snapshot.parties[1])
