@@ -155,6 +155,7 @@ def test_mutation_creation_uses_profile_defaults_and_order() -> None:
         "1": {
             "total_amount": -15.0,
             "total_marked_amount": -10.0,
+            "total_unmarked_amount": -5.0,
         }
     }
 
@@ -181,6 +182,7 @@ def test_framed_worker_serves_all_read_models_from_one_document_pipeline() -> No
     assert accounts[0]["id"] == "1"
     assert accounts[0]["total"]["total_amount"] == -10.0
     assert accounts[0]["total"]["total_marked_amount"] == -10.0
+    assert accounts[0]["total"]["total_unmarked_amount"] == 0.0
 
     _header, output = execute_request(
         {**base, "command": "listParties"},
@@ -227,9 +229,33 @@ def test_framed_worker_serves_all_read_models_from_one_document_pipeline() -> No
         "1": {
             "total_amount": 0.0,
             "total_marked_amount": 0.0,
+            "total_unmarked_amount": 0.0,
         }
     }
     assert mutation_output != payload
+
+    mark_header, marked_output = execute_request(
+        {
+            **base,
+            "command": "mutate",
+            "operations": [
+                {
+                    "type": "setTransactionMarks",
+                    "marks": [["1", 0]],
+                },
+            ],
+        },
+        payload,
+        password=None,
+    )
+    assert mark_header["accountTotals"] == {
+        "1": {
+            "total_amount": -10.0,
+            "total_marked_amount": 0.0,
+            "total_unmarked_amount": -10.0,
+        }
+    }
+    assert marked_output != payload
 
 
 def test_envelope_inspection_does_not_require_the_file_password() -> None:
