@@ -11,6 +11,7 @@ from ._mutation_core import (
     _canonical_id,
     _clean_name,
     _date,
+    _decimal,
     _name_key,
     _nullable,
     _required,
@@ -20,6 +21,73 @@ from .errors import MutationError
 from .formats import SupportLevel
 from .parser import parse_document
 from .validator import assert_valid_document, warning_issues
+
+
+def _affected_account_totals(
+    session: MutationSession,
+    final_document: Any,
+) -> Dict[str, Dict[str, float]]:
+    affected: set[str] = set()
+    for transaction_id, original in session.original_transactions.items():
+        current = session.transactions.get(transaction_id)
+        if transaction_id in session.deleted_transactions:
+            if original.get("Ac"):
+                affected.add(original["Ac"])
+            continue
+        if current is None or current == original:
+            continue
+        if original.get("Ac"):
+            affected.add(original["Ac"])
+        if current.get("Ac"):
+            affected.add(current["Ac"])
+
+    for transaction_id in session.new_transaction_ids:
+        if transaction_id in session.deleted_transactions:
+            continue
+        current = session.transactions.get(transaction_id)
+        if current is not None and current.get("Ac"):
+            affected.add(current["Ac"])
+
+    if not affected:
+        return {}
+
+    totals: Dict[str, Dict[str, Decimal]] = {}
+    for element in final_document.root:
+        if element.tag != "Account":
+            continue
+        account_id = element.get("Number") or ""
+        if account_id not in affected:
+            continue
+        totals[account_id] = {
+            "total_amount": _decimal(
+                element.get("Initial_balance", "0"),
+                "Account Initial balance",
+            ),
+            "total_marked_amount": Decimal("0"),
+        }
+
+    for element in final_document.root:
+        if element.tag != "Transaction":
+            continue
+        account_id = element.get("Ac") or ""
+        values = totals.get(account_id)
+        if values is None:
+            continue
+        amount = _decimal(
+            element.get("Am"),
+            "Transaction %s amount" % (element.get("Nb") or "?"),
+        )
+        values["total_amount"] += amount
+        if element.get("Ma", "0") == "1":
+            values["total_marked_amount"] += amount
+
+    return {
+        account_id: {
+            "total_amount": float(values["total_amount"]),
+            "total_marked_amount": float(values["total_marked_amount"]),
+        }
+        for account_id, values in totals.items()
+    }
 
 
 class MutationSession(MutationCoreSession):
@@ -434,6 +502,7 @@ def apply_mutations(
         tuple(session.outcomes),
         warnings,
         changed_records,
+        _affected_account_totals(session, final_document),
     )
 
 
