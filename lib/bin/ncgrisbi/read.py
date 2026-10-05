@@ -18,6 +18,7 @@ _NULLS = (None, "", "0", "(null)", "(NULL)")
 _ZERO_TOTAL = {
     "total_amount": Decimal("0"),
     "total_marked_amount": Decimal("0"),
+    "total_unmarked_amount": Decimal("0"),
 }
 
 
@@ -140,8 +141,11 @@ def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
             "Transaction %s amount" % (transaction.get("Nb") or "?"),
         )
         values["total_amount"] += amount
-        if transaction.get("Ma", "0") == "1":
+        marked = transaction.get("Ma", "0")
+        if marked == "1":
             values["total_marked_amount"] += amount
+        elif marked == "0":
+            values["total_unmarked_amount"] += amount
 
     result: List[Dict[str, Any]] = []
     for account in context.account_rows:
@@ -163,6 +167,7 @@ def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
                 "total": {
                     "total_amount": float(values["total_amount"]),
                     "total_marked_amount": float(values["total_marked_amount"]),
+                    "total_unmarked_amount": float(values["total_unmarked_amount"]),
                 },
             }
         )
@@ -277,6 +282,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
     currency = context.currencies.get(currency_id)
     total_amount = _decimal(account.get("Initial_balance", "0"), "Account Initial balance")
     total_marked_amount = Decimal("0")
+    total_unmarked_amount = Decimal("0")
     rows: List[Dict[str, Any]] = []
     maximum_id = 0
 
@@ -291,8 +297,11 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
             "Transaction %s amount" % transaction_id,
         )
         total_amount += amount
-        if transaction.get("Ma", "0") == "1":
+        marked = transaction.get("Ma", "0")
+        if marked == "1":
             total_marked_amount += amount
+        elif marked == "0":
+            total_unmarked_amount += amount
 
         party = context.parties.get(transaction.get("Pa") or "0")
         payment = context.payments.get(transaction.get("Pn") or "0")
@@ -356,6 +365,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
         },
         "total_amount": float(total_amount),
         "total_marked_amount": float(total_marked_amount),
+        "total_unmarked_amount": float(total_unmarked_amount),
         "payment_methods": payment_methods,
         "next_id": maximum_id + 1,
     }
