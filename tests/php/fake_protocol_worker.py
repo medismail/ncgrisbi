@@ -81,6 +81,12 @@ else:
         'changed': True,
         'sha256': hashlib.sha256(output).hexdigest(),
         'outcomes': [{'recordId': '13'}],
+        'accountTotals': {
+            '1': {
+                'total_amount': -15.0,
+                'total_marked_amount': -10.0,
+            },
+        },
     }
 response['payloadLength'] = len(output)
 raw = json.dumps(response, separators=(',', ':')).encode()
