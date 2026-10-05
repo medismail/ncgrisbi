@@ -696,6 +696,7 @@ async function submitOperations(operations, confirmed = false) {
       operations,
     })
     etag.value = response.document.etag
+    store.commit('updateAccountTotals', response.accountTotals)
     validationErrorKey.value = null
     validationErrorMessage.value = ''
     await loadSnapshot()
