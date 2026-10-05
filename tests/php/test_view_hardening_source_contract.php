@@ -12,6 +12,7 @@ $root = dirname(__DIR__, 2);
 $package = file_get_contents($root . '/package.json');
 $main = file_get_contents($root . '/src/main.js');
 $store = file_get_contents($root . '/src/store.js');
+$accountTotals = file_get_contents($root . '/src/domain/accountTotals.mjs');
 $service = file_get_contents($root . '/src/services/gsbApi.js');
 $accountShell = file_get_contents($root . '/src/views/AccountListView.vue');
 $overview = file_get_contents($root . '/src/views/AccountOverview.vue');
@@ -29,6 +30,8 @@ $snapshot = file_get_contents($root . '/lib/bin/ncgrisbi/snapshot.py');
 view_check(str_contains($store, 'transactionPending'), 'shared pending transaction state is missing');
 view_check(str_contains($store, 'accountsLoading') && str_contains($store, 'accountsError'), 'account loading/error state is missing');
 view_check(str_contains($store, 'validateFilePassword'), 'password validation action is missing');
+view_check(str_contains($store, 'updateAccountTotals'), 'saved account totals are not published to shared state');
+view_check(str_contains($accountTotals, 'return changed ? next : accounts'), 'unchanged account totals do not preserve reactive identity');
 view_check(str_contains($service, 'export async function fetchAccounts'), 'normalized account API service is missing');
 view_check(str_contains($service, 'export async function fetchDocumentState'), 'document state API service is missing');
 view_check(str_contains($package, '"@nextcloud/dialogs"'), 'Nextcloud toast dependency is missing');
@@ -70,6 +73,8 @@ view_check(str_contains($transactions, 'compatibility-popover'), 'compatibility 
 view_check(str_contains($transactions, "window.addEventListener('beforeunload'"), 'browser draft-loss guard is missing');
 view_check(str_contains($transactions, 'onBeforeRouteLeave'), 'route draft-loss guard is missing');
 view_check(str_contains($transactions, "store.commit('setTransactionPending'"), 'transaction view does not publish pending state');
+view_check(str_contains($transactions, "store.commit('updateAccountTotals', response.accountTotals)"), 'successful saves do not refresh account overview totals');
+view_check(!str_contains($transactions, "dispatch('fetchAccounts'"), 'transaction save performs an unnecessary account refetch');
 view_check(str_contains($responsiveCss, ':has(.search-popover)'), 'open search does not reserve header space');
 view_check(str_contains($responsiveCss, 'margin-bottom: 56px'), 'search header spacing is too small or missing');
 
