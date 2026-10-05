@@ -31,6 +31,14 @@ $result = $process->mutate(
 check($result['content'] === 'GSB!', 'protocol payload did not round trip');
 check($result['changed'] === true, 'changed flag was not returned');
 check($result['outcomes'][0]['recordId'] === '13', 'outcome was not returned');
+check(
+    $result['accountTotals']['1']['total_amount'] === -15.0,
+    'account totals were not returned'
+);
+check(
+    $result['accountTotals']['1']['total_marked_amount'] === -10.0,
+    'marked account total was not returned'
+);
 
 $snapshot = $process->getAccountSnapshot('1', 'GSB');
 check($snapshot['account']['id'] === '1', 'snapshot account ID was not returned');
