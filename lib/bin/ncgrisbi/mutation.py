@@ -24,30 +24,9 @@ from .validator import assert_valid_document, warning_issues
 
 
 def _affected_account_totals(
-    session: MutationSession,
+    affected: set[str],
     final_document: Any,
 ) -> Dict[str, Dict[str, float]]:
-    affected: set[str] = set()
-    for transaction_id, original in session.original_transactions.items():
-        current = session.transactions.get(transaction_id)
-        if transaction_id in session.deleted_transactions:
-            if original.get("Ac"):
-                affected.add(original["Ac"])
-            continue
-        if current is None or current == original:
-            continue
-        if original.get("Ac"):
-            affected.add(original["Ac"])
-        if current.get("Ac"):
-            affected.add(current["Ac"])
-
-    for transaction_id in session.new_transaction_ids:
-        if transaction_id in session.deleted_transactions:
-            continue
-        current = session.transactions.get(transaction_id)
-        if current is not None and current.get("Ac"):
-            affected.add(current["Ac"])
-
     if not affected:
         return {}
 
@@ -487,7 +466,7 @@ def apply_mutations(
     session = MutationSession(document)
     for client_index, raw in enumerate(operations):
         session.apply(raw, client_index)
-    output, changed_records, final_document = session.render(password=password)
+    output, changed_records, final_document, affected_accounts = session.render(password=password)
     warnings = tuple(
         {
             "code": issue.code,
@@ -503,7 +482,7 @@ def apply_mutations(
         tuple(session.outcomes),
         warnings,
         changed_records,
-        _affected_account_totals(session, final_document),
+        _affected_account_totals(affected_accounts, final_document),
     )
 
 
