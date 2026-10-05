@@ -23,7 +23,7 @@
           <span>{{ summary.currency }}</span>
           <strong>{{ money(summary.total, summary.currency) }}</strong>
           <small>Checked: {{ money(summary.marked, summary.currency) }}</small>
-          <small>Difference: {{ money(summary.total - summary.marked, summary.currency) }}</small>
+          <small>Unchecked: {{ money(summary.unmarked, summary.currency) }}</small>
         </article>
       </section>
 
@@ -56,9 +56,9 @@
                 </dd>
               </div>
               <div>
-                <dt>Difference</dt>
-                <dd :class="{ negative: accountDifference(account) < 0 }">
-                  {{ money(accountDifference(account), currencyCode(account)) }}
+                <dt>Unchecked</dt>
+                <dd :class="{ negative: number(account.total?.total_unmarked_amount) < 0 }">
+                  {{ money(account.total?.total_unmarked_amount, currencyCode(account)) }}
                 </dd>
               </div>
             </dl>
@@ -99,10 +99,6 @@ function money(amount, currency) {
   }).format(number(amount))
 }
 
-function accountDifference(account) {
-  return number(account.total?.total_amount) - number(account.total?.total_marked_amount)
-}
-
 function accountType(type) {
   const labels = {
     BANK: 'Bank account',
@@ -124,9 +120,10 @@ const currencyTotals = computed(() => {
   const totals = new Map()
   for (const account of accounts.value) {
     const currency = currencyCode(account)
-    const current = totals.get(currency) ?? { currency, total: 0, marked: 0 }
+    const current = totals.get(currency) ?? { currency, total: 0, marked: 0, unmarked: 0 }
     current.total += number(account.total?.total_amount)
     current.marked += number(account.total?.total_marked_amount)
+    current.unmarked += number(account.total?.total_unmarked_amount)
     totals.set(currency, current)
   }
   return [...totals.values()].sort((left, right) => left.currency.localeCompare(right.currency))
