@@ -51,22 +51,23 @@ def _affected_account_totals(
     if not affected:
         return {}
 
-    totals: Dict[str, Dict[str, Decimal]] = {}
-    for element in final_document.root:
-        if element.tag != "Account":
-            continue
-        account_id = element.get("Number") or ""
-        if account_id not in affected:
-            continue
-        totals[account_id] = {
-            "total_amount": _decimal(
-                element.get("Initial_balance", "0"),
-                "Account Initial balance",
-            ),
+    totals: Dict[str, Dict[str, Decimal]] = {
+        account_id: {
+            "total_amount": Decimal("0"),
             "total_marked_amount": Decimal("0"),
         }
-
+        for account_id in affected
+    }
     for element in final_document.root:
+        if element.tag == "Account":
+            account_id = element.get("Number") or ""
+            values = totals.get(account_id)
+            if values is not None:
+                values["total_amount"] += _decimal(
+                    element.get("Initial_balance", "0"),
+                    "Account Initial balance",
+                )
+            continue
         if element.tag != "Transaction":
             continue
         account_id = element.get("Ac") or ""
