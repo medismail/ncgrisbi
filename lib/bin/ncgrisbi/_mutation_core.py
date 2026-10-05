@@ -919,18 +919,25 @@ class Phase6Session:
             raise MutationError("Unsupported mutation operation type: %s" % operation_type)
         handler(raw, client_index)
 
-    def render(self, password: Optional[str] = None) -> Tuple[bytes, int, Any]:
+    def render(self, password: Optional[str] = None) -> Tuple[bytes, int, Any, set[str]]:
         writer = LosslessPatchWriter(self.document)
         changed_records = 0
+        affected_accounts: set[str] = set()
         for transaction_id, original in self.original_transactions.items():
             span = self.transaction_spans[transaction_id]
             if transaction_id in self.deleted_transactions:
                 writer.delete(span)
+                if original.get("Ac"):
+                    affected_accounts.add(original["Ac"])
                 changed_records += 1
                 continue
             current = self.transactions[transaction_id]
             if current == original:
                 continue
+            if original.get("Ac"):
+                affected_accounts.add(original["Ac"])
+            if current.get("Ac"):
+                affected_accounts.add(current["Ac"])
             changed_keys = {
                 key
                 for key in set(original) | set(current)
@@ -946,10 +953,13 @@ class Phase6Session:
             changed_records += 1
         for transaction_id in self.new_transaction_ids:
             if transaction_id not in self.deleted_transactions:
-                writer.insert_record("Transaction", self.transactions[transaction_id])
+                current = self.transactions[transaction_id]
+                writer.insert_record("Transaction", current)
+                if current.get("Ac"):
+                    affected_accounts.add(current["Ac"])
                 changed_records += 1
         if not writer.changed:
-            return self.document.raw_bytes, changed_records, self.document
+            return self.document.raw_bytes, changed_records, self.document, affected_accounts
         xml_bytes = writer.render_xml()
         # Parse the final plain XML once for semantic verification. This avoids
         # decrypting/decompressing the just-produced output a second time.
@@ -960,7 +970,7 @@ class Phase6Session:
             self.document.envelope,
             password=password,
         )
-        return raw_bytes, changed_records, final_document
+        return raw_bytes, changed_records, final_document, affected_accounts
 
 
 def apply_phase6_operations(
@@ -977,7 +987,7 @@ def apply_phase6_operations(
     session = Phase6Session(document)
     for client_index, raw in enumerate(operations):
         session.apply(raw, client_index)
-    output, changed_records, final_document = session.render(password=password)
+    output, changed_records, final_document, _affected_accounts = session.render(password=password)
     warnings = tuple(
         {
             "code": issue.code,
