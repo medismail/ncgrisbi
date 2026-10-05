@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -29,6 +29,7 @@ class Phase6Result:
     outcomes: Tuple[Dict[str, Any], ...]
     warnings: Tuple[Dict[str, Any], ...]
     changed_records: int
+    account_totals: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
 
 def _canonical_id(value: Any, field: str, allow_zero: bool = False) -> str:
