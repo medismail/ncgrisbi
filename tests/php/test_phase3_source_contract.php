@@ -70,5 +70,13 @@ contract_check(
     str_contains($service, 'IUserSession'),
     'service does not resolve the authenticated user through IUserSession'
 );
+contract_check(
+    str_contains($process, "'accountTotals' => is_array(\$header['accountTotals'] ?? null)"),
+    'mutation account totals are not propagated from the worker'
+);
+contract_check(
+    str_contains($controller, "'accountTotals' => \$accountTotals"),
+    'mutation API does not expose account totals separately from document metadata'
+);
 
 echo "phase3 source contract tests passed\n";
