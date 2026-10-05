@@ -1,4 +1,5 @@
 import { createStore } from 'vuex'
+import { mergeAccountTotals } from './domain/accountTotals.mjs'
 import {
   apiError,
   fetchAccounts as fetchAccountsRequest,
@@ -24,6 +25,9 @@ const store = createStore({
   mutations: {
     setAccounts(state, accounts) {
       state.accounts = Array.isArray(accounts) ? accounts : []
+    },
+    updateAccountTotals(state, totalsByAccount) {
+      state.accounts = mergeAccountTotals(state.accounts, totalsByAccount)
     },
     setAccountsLoading(state, loading) {
       state.accountsLoading = Boolean(loading)
