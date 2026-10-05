@@ -151,6 +151,12 @@ def test_mutation_creation_uses_profile_defaults_and_order() -> None:
     assert transaction.get("Exr") == "0.00"
     assert transaction.get("Trt") == "0"
     assert transaction.get("Mo") == "0"
+    assert result.account_totals == {
+        "1": {
+            "total_amount": -15.0,
+            "total_marked_amount": -10.0,
+        }
+    }
 
 
 def test_snapshot_prefers_current_account_completion() -> None:
@@ -205,6 +211,25 @@ def test_framed_worker_serves_all_read_models_from_one_document_pipeline() -> No
         password=None,
     )
     assert json.loads(output)["a"][0] == "1"
+
+    mutation_header, mutation_output = execute_request(
+        {
+            **base,
+            "command": "mutate",
+            "operations": [
+                {"type": "deleteTransaction", "transactionId": "1"},
+            ],
+        },
+        payload,
+        password=None,
+    )
+    assert mutation_header["accountTotals"] == {
+        "1": {
+            "total_amount": 0.0,
+            "total_marked_amount": 0.0,
+        }
+    }
+    assert mutation_output != payload
 
 
 def test_envelope_inspection_does_not_require_the_file_password() -> None:
