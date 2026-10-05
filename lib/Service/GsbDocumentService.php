@@ -99,7 +99,7 @@ final class GsbDocumentService {
 
     /**
      * @param list<array<string, mixed>> $operations
-     * @return array{fileId: int, etag: string, changed: bool, outcomes: array<int, mixed>, sha256: string}
+     * @return array{fileId: int, etag: string, changed: bool, outcomes: array<int, mixed>, accountTotals: array<string, mixed>, sha256: string}
      */
     public function mutate(
         string $filePath,
@@ -156,6 +156,7 @@ final class GsbDocumentService {
                 'etag' => (string)$file->getEtag(),
                 'changed' => $bytesChanged,
                 'outcomes' => $result['outcomes'],
+                'accountTotals' => $result['accountTotals'],
                 'sha256' => $result['sha256'],
             ];
         } finally {
