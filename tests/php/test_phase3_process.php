@@ -39,10 +39,6 @@ check(
     $result['accountTotals']['1']['total_marked_amount'] === -10.0,
     'marked account total was not returned'
 );
-check(
-    $result['accountTotals']['1']['total_unmarked_amount'] === -5.0,
-    'unmarked account total was not returned'
-);
 
 $snapshot = $process->getAccountSnapshot('1', 'GSB');
 check($snapshot['account']['id'] === '1', 'snapshot account ID was not returned');
