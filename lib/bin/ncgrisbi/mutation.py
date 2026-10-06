@@ -34,7 +34,6 @@ def _affected_account_totals(
         account_id: {
             "total_amount": Decimal("0"),
             "total_marked_amount": Decimal("0"),
-            "total_unmarked_amount": Decimal("0"),
         }
         for account_id in affected
     }
@@ -59,17 +58,13 @@ def _affected_account_totals(
             "Transaction %s amount" % (element.get("Nb") or "?"),
         )
         values["total_amount"] += amount
-        marked = element.get("Ma", "0")
-        if marked == "1":
+        if element.get("Ma", "0") == "1":
             values["total_marked_amount"] += amount
-        elif marked == "0":
-            values["total_unmarked_amount"] += amount
 
     return {
         account_id: {
             "total_amount": float(values["total_amount"]),
             "total_marked_amount": float(values["total_marked_amount"]),
-            "total_unmarked_amount": float(values["total_unmarked_amount"]),
         }
         for account_id, values in totals.items()
     }
