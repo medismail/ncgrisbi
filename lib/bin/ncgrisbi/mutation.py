@@ -58,7 +58,7 @@ def _affected_account_totals(
             "Transaction %s amount" % (element.get("Nb") or "?"),
         )
         values["total_amount"] += amount
-        if element.get("Ma", "0") == "1":
+        if element.get("Ma", "0") in ("1", "2", "3"):
             values["total_marked_amount"] += amount
 
     return {

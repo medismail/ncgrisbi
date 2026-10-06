@@ -159,6 +159,63 @@ def test_mutation_creation_uses_profile_defaults_and_order() -> None:
     }
 
 
+def test_checked_totals_include_all_grisbi_checked_states() -> None:
+    extra_transactions = (
+        TRANSACTION_TEMPLATE.format(
+            account="1",
+            number="3",
+            amount="-2.00",
+            note="telepointed",
+            payment="1",
+            marked="2",
+        )
+        + "\n"
+        + TRANSACTION_TEMPLATE.format(
+            account="1",
+            number="4",
+            amount="-3.00",
+            note="reconciled",
+            payment="1",
+            marked="3",
+        )
+        + "\n"
+    ).encode("utf-8")
+    payload = fixture_bytes().replace(b"</Grisbi>", extra_transactions + b"</Grisbi>")
+
+    header, output = execute_request(
+        {"version": 1, "requestId": "checked-states", "command": "listAccounts"},
+        payload,
+        password=None,
+    )
+    assert header["ok"] is True
+    account = json.loads(output)[0]
+    assert account["total"]["total_amount"] == -15.0
+    assert account["total"]["total_marked_amount"] == -15.0
+
+    snapshot = build_account_snapshot(parse_document(payload), "1")
+    assert snapshot["a"][8] == "-15.00"
+    assert snapshot["a"][9] == "-15.00"
+
+    result = apply_mutations(
+        payload,
+        [{
+            "type": "createTransaction",
+            "accountId": "1",
+            "date": "01/05/2026",
+            "amount": "-5.00",
+            "paymentMethodId": "1",
+            "partyId": "1",
+            "categoryId": "1",
+            "subcategoryId": "1",
+            "marked": 0,
+        }],
+    )
+    assert result.account_totals["1"] == {
+        "total_amount": -20.0,
+        "total_marked_amount": -15.0,
+    }
+
+
 def test_snapshot_prefers_current_account_completion() -> None:
     document = parse_document(fixture_bytes())
     snapshot = build_account_snapshot(document, "1")
