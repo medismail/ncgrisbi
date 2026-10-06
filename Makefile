@@ -29,7 +29,7 @@ dist: build
 
 # Builds the source package for the app store, ignores php and js tests
 .PHONY: appstore
-appstore:
+appstore: dist
 	rm -rf $(appstore_build_directory)
 	mkdir -p $(appstore_build_directory)
 	tar cvzf $(appstore_package_name)_$(version).tar.gz \

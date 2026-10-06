@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { mergeAccountTotals } from '../../src/domain/accountTotals.mjs'
+import {
+  mergeAccountTotals,
+  snapshotAccountTotals,
+} from '../../src/domain/accountTotals.mjs'
 
 const accounts = [
   {
@@ -13,6 +16,18 @@ const accounts = [
     total: { total_amount: 25, total_marked_amount: 5 },
   },
 ]
+
+assert.deepEqual(snapshotAccountTotals({
+  id: '1',
+  totalAmount: '-12.50',
+  totalMarkedAmount: '-10.00',
+}), {
+  '1': {
+    total_amount: -12.5,
+    total_marked_amount: -10,
+  },
+})
+assert.deepEqual(snapshotAccountTotals(null), {})
 
 const unchanged = mergeAccountTotals(accounts, {
   '1': { total_amount: -10, total_marked_amount: -10 },

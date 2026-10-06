@@ -289,6 +289,7 @@ import { useStore } from 'vuex'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import TransactionEditorPanel from '@/components/transactions/TransactionEditorPanel.vue'
+import { snapshotAccountTotals } from '@/domain/accountTotals.mjs'
 import { sortTransactionsRecentFirst } from '@/domain/transactionOrdering.mjs'
 import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
 import {
@@ -409,6 +410,7 @@ async function loadSnapshot() {
       filePassword: store.state.filePassword,
     })
     snapshot.value = response.snapshot
+    store.commit('updateAccountTotals', snapshotAccountTotals(response.snapshot?.account))
     etag.value = response.document.etag
     rows.value = createResponsiveDrafts(response.snapshot)
     displayMode.value = preferredDisplayMode(response.snapshot.preferences)

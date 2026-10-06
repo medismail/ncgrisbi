@@ -74,6 +74,7 @@ view_check(str_contains($transactions, "window.addEventListener('beforeunload'")
 view_check(str_contains($transactions, 'onBeforeRouteLeave'), 'route draft-loss guard is missing');
 view_check(str_contains($transactions, "store.commit('setTransactionPending'"), 'transaction view does not publish pending state');
 view_check(str_contains($transactions, "store.commit('updateAccountTotals', response.accountTotals)"), 'successful saves do not refresh account overview totals');
+view_check(str_contains($transactions, "snapshotAccountTotals(response.snapshot?.account)"), 'snapshot reload does not authoritatively sync the current account totals');
 view_check(!str_contains($transactions, "dispatch('fetchAccounts'"), 'transaction save performs an unnecessary account refetch');
 view_check(str_contains($responsiveCss, ':has(.search-popover)'), 'open search does not reserve header space');
 view_check(str_contains($responsiveCss, 'margin-bottom: 56px'), 'search header spacing is too small or missing');

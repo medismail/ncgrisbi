@@ -3,6 +3,19 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null
 }
 
+export function snapshotAccountTotals(account) {
+  const id = String(account?.id ?? '')
+  const totalAmount = finiteNumber(account?.totalAmount)
+  const totalMarkedAmount = finiteNumber(account?.totalMarkedAmount)
+  if (!id || totalAmount === null || totalMarkedAmount === null) return {}
+  return {
+    [id]: {
+      total_amount: totalAmount,
+      total_marked_amount: totalMarkedAmount,
+    },
+  }
+}
+
 export function mergeAccountTotals(accounts, totalsByAccount) {
   if (!Array.isArray(accounts) || !totalsByAccount || typeof totalsByAccount !== 'object') {
     return Array.isArray(accounts) ? accounts : []
