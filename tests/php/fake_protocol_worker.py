@@ -85,7 +85,6 @@ else:
             '1': {
                 'total_amount': -15.0,
                 'total_marked_amount': -10.0,
-                'total_unmarked_amount': -5.0,
             },
         },
     }
