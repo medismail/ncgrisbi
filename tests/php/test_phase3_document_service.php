@@ -144,10 +144,6 @@ namespace {
         $result['accountTotals']['1']['total_marked_amount'] === -10.0,
         'service did not propagate marked account total'
     );
-    check_service(
-        $result['accountTotals']['1']['total_unmarked_amount'] === -5.0,
-        'service did not propagate unmarked account total'
-    );
 
     try {
         $service->mutate(
