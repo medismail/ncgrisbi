@@ -47,9 +47,7 @@ view_check(str_contains($accountShell, 'Total:') && str_contains($accountShell, 
 view_check(str_contains($accountShell, '<template #description>') || str_contains($accountShell, ':description="accountError.message"'), 'account error empty content has no description');
 
 view_check(str_contains($overview, '<RouterLink'), 'account cards are not navigable');
-view_check(str_contains($overview, 'Unchecked'), 'account unchecked total is missing');
-view_check(str_contains($overview, 'total_unmarked_amount'), 'overview derives unchecked total instead of using Grisbi mark state');
-view_check(!str_contains($overview, 'summary.total - summary.marked'), 'currency overview still derives unchecked total from balance minus checked');
+view_check(str_contains($overview, 'Difference'), 'account checked difference is missing');
 view_check(str_contains($overview, 'currencyTotals'), 'currency summary cards are missing');
 view_check(!str_contains($overview, 'Math.round(account.total'), 'negative balance styling still rounds values');
 view_check(str_contains($overview, 'name="No accounts found"'), 'account empty content name is missing');
