@@ -15,17 +15,11 @@ export function mergeAccountTotals(accounts, totalsByAccount) {
 
     const totalAmount = finiteNumber(totals.total_amount)
     const totalMarkedAmount = finiteNumber(totals.total_marked_amount)
-    const totalUnmarkedAmount = finiteNumber(totals.total_unmarked_amount)
-    if (totalAmount === null || totalMarkedAmount === null || totalUnmarkedAmount === null) {
-      return account
-    }
+    if (totalAmount === null || totalMarkedAmount === null) return account
 
     const currentTotal = finiteNumber(account?.total?.total_amount)
     const currentMarked = finiteNumber(account?.total?.total_marked_amount)
-    const currentUnmarked = finiteNumber(account?.total?.total_unmarked_amount)
-    if (currentTotal === totalAmount
-      && currentMarked === totalMarkedAmount
-      && currentUnmarked === totalUnmarkedAmount) {
+    if (currentTotal === totalAmount && currentMarked === totalMarkedAmount) {
       return account
     }
 
@@ -36,7 +30,6 @@ export function mergeAccountTotals(accounts, totalsByAccount) {
         ...(account?.total ?? {}),
         total_amount: totalAmount,
         total_marked_amount: totalMarkedAmount,
-        total_unmarked_amount: totalUnmarkedAmount,
       },
     }
   })
