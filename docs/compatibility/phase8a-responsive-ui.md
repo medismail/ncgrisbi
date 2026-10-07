@@ -45,7 +45,7 @@ The fields always visible on desktop and mobile are:
 
 Desktop also shows category/subcategory. Detailed mode adds payment method, counterpart method, note and bank reference. On mobile, detailed data occupies a second line and the editor opens full-screen without horizontal page scrolling.
 
-The initial row mode follows Grisbi `Lines_per_transaction`, `Two_lines_showed` and `Three_lines_showed`. The user can switch compact/detailed mode for the current session. Persisting that switch to the GSB file is deferred.
+The initial row mode follows the account-scoped Grisbi `Lines_per_transaction` preference only. Compact maps to `1` and detailed maps to `2`. Changing the mode is local and instant; if it differs from the saved account preference it becomes a pending change and is persisted with the next explicit `Save all to file` mutation batch. Global `Two_lines_showed` and `Three_lines_showed` preferences are intentionally not consulted or modified.
 
 ## Autocomplete identity
 
@@ -65,7 +65,9 @@ Selecting a party may complete only currently empty/default fields. Completed fi
 - Only one full editor is mounted.
 - Multiple local drafts are supported.
 - Quick marks remain one `setTransactionMarks` operation.
-- No per-field or per-transaction automatic file write.
+- No per-field, per-transaction or display-toggle automatic file write.
+- Account display preference changes are batched with transaction changes.
+- Preference-only saves do not calculate account financial totals.
 - One Phase 6 mutation session and one Nextcloud file write per explicit global save.
 
 ## Deferred autosave

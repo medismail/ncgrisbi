@@ -17,11 +17,11 @@
             <strong>{{ totals.totalAmount }} {{ snapshot.account.currency.code }}</strong>
             <span>Checked: {{ totals.totalMarkedAmount }} {{ snapshot.account.currency.code }}</span>
             <span
-              v-if="pendingSummary.total"
+              v-if="pendingTotal"
               class="pending-count"
               :title="pendingDescription"
             >
-              {{ pendingSummary.total }} pending
+              {{ pendingTotal }} pending
             </span>
 
             <NcPopover
@@ -103,7 +103,7 @@
                 :disabled="saving || conflict || !pendingChanges"
                 @click="runAction('save', $event)"
               >
-                {{ saving ? 'Saving…' : `Save all${pendingSummary.total ? ` (${pendingSummary.total})` : ''}` }}
+                {{ saving ? 'Saving…' : `Save all${pendingTotal ? ` (${pendingTotal})` : ''}` }}
               </button>
               <button
                 type="button"
@@ -295,6 +295,7 @@ import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
 import {
   TRANSFER_CATEGORY,
   applyEditorDraft,
+  buildAccountDisplayModeOperation,
   buildResponsiveMutationOperations,
   calculateTotals,
   cloneEditorDraft,
@@ -323,6 +324,7 @@ const message = ref('')
 const messageType = ref('info')
 const conflict = ref(false)
 const displayMode = ref('compact')
+const savedDisplayMode = ref('compact')
 const markFilter = ref('all')
 const searchOpen = ref(false)
 const searchQuery = ref('')
@@ -349,14 +351,18 @@ const displayedRows = computed(() => orderedRows.value.filter(row => {
   if (markFilter.value === 'locked' && ![2, 3].includes(Number(row.marked))) return false
   return matchesTransactionSearch(row, searchQuery.value)
 }))
+const displayModeDirty = computed(() => displayMode.value !== savedDisplayMode.value)
 const pendingChanges = computed(() => hasResponsivePendingChanges(rows.value)
-  || editorDraftChanged(editorDraft.value, editorBaseline.value))
+  || editorDraftChanged(editorDraft.value, editorBaseline.value)
+  || displayModeDirty.value)
 const pendingSummary = computed(() => pendingChangeSummary(rowsWithActiveDraft()))
+const pendingTotal = computed(() => pendingSummary.value.total + (displayModeDirty.value ? 1 : 0))
 const pendingDescription = computed(() => [
   pendingSummary.value.created ? `${pendingSummary.value.created} new` : '',
   pendingSummary.value.edited ? `${pendingSummary.value.edited} edited` : '',
   pendingSummary.value.marked ? `${pendingSummary.value.marked} checked/unchecked` : '',
   pendingSummary.value.deleted ? `${pendingSummary.value.deleted} deleted` : '',
+  displayModeDirty.value ? `${displayMode.value} view preference` : '',
 ].filter(Boolean).join(', '))
 const totals = computed(() => calculateTotals(
   rowsWithActiveDraft(),
@@ -392,7 +398,7 @@ function rowsWithActiveDraft() {
 function syncSharedPendingState() {
   store.commit('setTransactionPending', {
     active: pendingChanges.value,
-    total: pendingSummary.value.total,
+    total: pendingTotal.value,
     description: pendingDescription.value || (pendingChanges.value ? 'open transaction editor changes' : ''),
   })
 }
@@ -413,7 +419,9 @@ async function loadSnapshot() {
     store.commit('updateAccountTotals', snapshotAccountTotals(response.snapshot?.account))
     etag.value = response.document.etag
     rows.value = createResponsiveDrafts(response.snapshot)
-    displayMode.value = preferredDisplayMode(response.snapshot.preferences)
+    const loadedDisplayMode = preferredDisplayMode(response.snapshot.preferences)
+    displayMode.value = loadedDisplayMode
+    savedDisplayMode.value = loadedDisplayMode
     markFilter.value = 'all'
     searchQuery.value = ''
     searchOpen.value = false
@@ -684,7 +692,7 @@ function handleRowKeydown(event, row) {
 }
 
 function discardPrompt(context) {
-  const count = pendingSummary.value.total
+  const count = pendingTotal.value
   const details = pendingDescription.value || 'open editor changes'
   return `${context} This will permanently discard ${count} local pending change${count === 1 ? '' : 's'} (${details}). This cannot be undone.`
 }
@@ -702,7 +710,7 @@ async function submitOperations(operations, confirmed = false) {
     validationErrorKey.value = null
     validationErrorMessage.value = ''
     await loadSnapshot()
-    setMessage('All pending transactions were saved in one file write.', 'success')
+    setMessage('All pending changes were saved in one file write.', 'success')
     return true
   } catch (error) {
     const failure = apiError(error)
@@ -718,7 +726,7 @@ async function submitOperations(operations, confirmed = false) {
     conflict.value = failure.code === 'etag-conflict'
     setMessage(
       conflict.value
-        ? `The GSB file changed elsewhere. ${pendingSummary.value.total} local draft change${pendingSummary.value.total === 1 ? '' : 's'} remain preserved in this browser.`
+        ? `The GSB file changed elsewhere. ${pendingTotal.value} local pending change${pendingTotal.value === 1 ? '' : 's'} remain preserved in this browser.`
         : failure.message,
       'error',
     )
@@ -743,6 +751,12 @@ async function saveChanges() {
   let operations
   try {
     operations = buildResponsiveMutationOperations(prospectiveRows, snapshot.value)
+    const displayOperation = buildAccountDisplayModeOperation(
+      snapshot.value?.account?.id,
+      displayMode.value,
+      savedDisplayMode.value,
+    )
+    if (displayOperation) operations.push(displayOperation)
   } catch (error) {
     await revealValidationError(error)
     return
@@ -808,7 +822,7 @@ onBeforeRouteLeave(() => {
 })
 
 watch(
-  () => [pendingChanges.value, pendingSummary.value.total, pendingDescription.value],
+  () => [pendingChanges.value, pendingTotal.value, pendingDescription.value],
   syncSharedPendingState,
   { immediate: true },
 )

@@ -216,6 +216,41 @@ def test_checked_totals_include_all_grisbi_checked_states() -> None:
     }
 
 
+def test_account_display_mode_is_saved_per_account_without_total_work() -> None:
+    detailed = apply_mutations(
+        fixture_bytes(),
+        [{
+            "type": "setAccountDisplayMode",
+            "accountId": "1",
+            "mode": "detailed",
+        }],
+    )
+    detailed_document = parse_document(detailed.raw_bytes)
+    accounts = {
+        element.get("Number"): element
+        for element in detailed_document.root.findall("Account")
+    }
+    assert accounts["1"].get("Lines_per_transaction") == "2"
+    assert accounts["2"].get("Lines_per_transaction") == "1"
+    assert detailed.account_totals == {}
+    assert detailed.changed_records == 1
+
+    compact = apply_mutations(
+        detailed.raw_bytes,
+        [{
+            "type": "setAccountDisplayMode",
+            "accountId": "1",
+            "mode": "compact",
+        }],
+    )
+    compact_document = parse_document(compact.raw_bytes)
+    assert (
+        compact_document.root.findall("Account")[0].get("Lines_per_transaction")
+        == "1"
+    )
+    assert compact.account_totals == {}
+
+
 def test_snapshot_prefers_current_account_completion() -> None:
     document = parse_document(fixture_bytes())
     snapshot = build_account_snapshot(document, "1")

@@ -150,6 +150,8 @@ class Phase6Session:
         self.transactions: Dict[str, Dict[str, str]] = {}
         self.original_transactions: Dict[str, Dict[str, str]] = {}
         self.transaction_spans: Dict[str, Any] = {}
+        self.account_spans: Dict[str, Any] = {}
+        self.account_line_updates: Dict[str, str] = {}
 
         account_spans = document.spans_for("Account")
         currency_spans = document.spans_for("Currency")
@@ -158,9 +160,11 @@ class Phase6Session:
         category_spans = document.spans_for("Category")
         subcategory_spans = document.spans_for("Sub_category")
         transaction_spans = document.spans_for("Transaction")
-        for element, _span in zip(document.root.findall("Account"), account_spans):
-            if element.get("Number"):
-                self.accounts[element.get("Number")] = dict(element.attrib)
+        for element, span in zip(document.root.findall("Account"), account_spans):
+            account_id = element.get("Number")
+            if account_id:
+                self.accounts[account_id] = dict(element.attrib)
+                self.account_spans[account_id] = span
         for element, _span in zip(document.root.findall("Currency"), currency_spans):
             if element.get("Nb"):
                 self.currencies[element.get("Nb")] = dict(element.attrib)
@@ -864,6 +868,42 @@ class Phase6Session:
         self._outcome(client_index, "ConvertTransferToTransaction", "Transaction", source_id, "transaction")
         self._outcome(client_index, "DeleteTransferCounterpart", "Transaction", counterpart_id, "counterpart")
 
+    def set_account_display_mode(
+        self,
+        raw: Mapping[str, Any],
+        client_index: int,
+    ) -> None:
+        _strict_fields(raw, ("accountId", "mode"))
+        account_id = _canonical_id(_required(raw, "accountId"), "accountId")
+        account = self.accounts.get(account_id)
+        if account is None:
+            raise MutationError("Unknown account %s" % account_id)
+
+        mode = _required(raw, "mode")
+        if mode not in ("compact", "detailed"):
+            raise MutationError("mode must be compact or detailed")
+        lines = "1" if mode == "compact" else "2"
+        current = account.get("Lines_per_transaction", "1")
+        changed = current != lines
+        if changed:
+            if account_id not in self.account_spans:
+                raise MutationError("Account %s has no writable source span" % account_id)
+            if "Lines_per_transaction" not in account:
+                raise MutationError(
+                    "Account %s has no Lines_per_transaction preference" % account_id
+                )
+            account["Lines_per_transaction"] = lines
+            self.account_line_updates[account_id] = lines
+
+        self._outcome(
+            client_index,
+            "SetAccountDisplayMode",
+            "Account",
+            account_id,
+            changed=changed,
+            linesPerTransaction=int(lines),
+        )
+
     def set_transaction_marks(self, raw: Mapping[str, Any], client_index: int) -> None:
         _strict_fields(raw, ("marks",))
         marks = _required(raw, "marks")
@@ -912,6 +952,7 @@ class Phase6Session:
             "deleteTransfer": self.delete_transfer,
             "convertTransactionToTransfer": self.convert_transaction_to_transfer,
             "convertTransferToTransaction": self.convert_transfer_to_transaction,
+            "setAccountDisplayMode": self.set_account_display_mode,
             "setTransactionMarks": self.set_transaction_marks,
         }
         handler = dispatch.get(operation_type)
@@ -923,6 +964,13 @@ class Phase6Session:
         writer = LosslessPatchWriter(self.document)
         changed_records = 0
         affected_accounts: set[str] = set()
+        for account_id, lines in self.account_line_updates.items():
+            writer.replace_attribute(
+                self.account_spans[account_id],
+                "Lines_per_transaction",
+                lines,
+            )
+            changed_records += 1
         for transaction_id, original in self.original_transactions.items():
             span = self.transaction_spans[transaction_id]
             if transaction_id in self.deleted_transactions:

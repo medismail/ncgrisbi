@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   applyEditorDraft,
   applyPartyCompletionTrace,
+  buildAccountDisplayModeOperation,
   buildResponsiveMutationOperations,
   cloneEditorDraft,
   createResponsiveDrafts,
@@ -116,7 +117,19 @@ const snapshot = {
 }
 
 assert.equal(preferredDisplayMode({ linesPerTransaction: 1 }), 'compact')
+assert.equal(preferredDisplayMode({
+  linesPerTransaction: 1,
+  twoLinesShowed: true,
+  threeLinesShowed: true,
+}), 'compact')
+assert.equal(preferredDisplayMode({ linesPerTransaction: 2 }), 'detailed')
 assert.equal(preferredDisplayMode({ linesPerTransaction: 3 }), 'detailed')
+assert.equal(buildAccountDisplayModeOperation('1', 'compact', 'compact'), null)
+assert.deepEqual(buildAccountDisplayModeOperation('1', 'detailed', 'compact'), {
+  type: 'setAccountDisplayMode',
+  accountId: '1',
+  mode: 'detailed',
+})
 
 const exactRows = createResponsiveDrafts(snapshot)
 setSelectedItem(exactRows[0], 'party', snapshot.parties[1])

@@ -85,6 +85,8 @@ class MutationSession(MutationCoreSession):
         self.transactions: Dict[str, Dict[str, str]] = {}
         self.original_transactions: Dict[str, Dict[str, str]] = {}
         self.transaction_spans: Dict[str, Any] = {}
+        self.account_spans: Dict[str, Any] = {}
+        self.account_line_updates: Dict[str, str] = {}
 
         # Parser spans and root children have already been proven to align. Build
         # all mutation indexes in one pass instead of scanning each tag twice.
@@ -95,6 +97,7 @@ class MutationSession(MutationCoreSession):
                 key = element.get("Number")
                 if key:
                     self.accounts[key] = attributes
+                    self.account_spans[key] = span
             elif tag == "Currency":
                 key = element.get("Nb")
                 if key:

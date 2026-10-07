@@ -83,6 +83,11 @@ phase8a_check(str_contains($view, ':tabindex="row.key === selectedRowKey ? 0 : -
 
 phase8a_check(str_contains($view, 'pendingChangeSummary'), 'pending transaction summary is missing');
 phase8a_check(str_contains($view, 'preferredDisplayMode'), 'Grisbi line preference is not used');
+phase8a_check(str_contains($view, 'savedDisplayMode'), 'saved display-mode baseline is missing');
+phase8a_check(str_contains($view, 'buildAccountDisplayModeOperation'), 'display mode is not included in the save batch');
+phase8a_check(str_contains($domain, "type: 'setAccountDisplayMode'"), 'account display-mode mutation planner is missing');
+phase8a_check(str_contains($domain, "Number(preferences?.linesPerTransaction ?? 1) >= 2"), 'detail mode does not map to two account lines');
+phase8a_check(!str_contains($domain, 'twoLinesShowed') && !str_contains($domain, 'threeLinesShowed'), 'global Grisbi line preferences still influence account display mode');
 phase8a_check(str_contains($view, "markFilter.value === 'unchecked'"), 'unchecked filter is missing');
 phase8a_check(!str_contains($view, 'setTransactionMarks'), 'view constructs raw mark mutations instead of using domain planner');
 phase8a_check(str_contains($panel, 'Save draft & add another'), 'multi-entry workflow is missing');
