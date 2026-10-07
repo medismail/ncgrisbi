@@ -203,6 +203,7 @@ final class ApiController extends Controller {
             $status = match ($code) {
                 'mutation-conflict' => 409,
                 'record-not-found' => 404,
+                'crypto-dependency-missing' => 503,
                 'invalid-protocol', 'internal-error' => 500,
                 default => 422,
             };

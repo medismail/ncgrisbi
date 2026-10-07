@@ -10,6 +10,10 @@ class PasswordRequiredError(EnvelopeError):
     """Raised when encrypted content is opened or written without a password."""
 
 
+class CryptoDependencyError(EnvelopeError):
+    """Raised when encrypted files cannot be processed without PyCryptodome."""
+
+
 class UnsupportedFileVersionError(GsbError):
     """Raised when a GSB file version is outside the supported profile."""
 

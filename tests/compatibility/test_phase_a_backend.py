@@ -15,7 +15,8 @@ from ncgrisbi.mutation import apply_mutations
 from ncgrisbi.parser import parse_document
 from ncgrisbi.snapshot import build_account_snapshot
 from ncgrisbi.validator import assert_valid_document
-from ncgrisbi.worker import execute_request
+from ncgrisbi.errors import CryptoDependencyError
+from ncgrisbi.worker import error_response, execute_request
 from ncgrisbi.writer import LosslessPatchWriter
 
 
@@ -322,6 +323,20 @@ def test_framed_worker_serves_all_read_models_from_one_document_pipeline() -> No
         }
     }
     assert mutation_output != payload
+
+
+def test_missing_crypto_dependency_has_dedicated_protocol_error() -> None:
+    response = error_response(
+        CryptoDependencyError(
+            "Encrypted Grisbi files require PyCryptodome. "
+            "Install it with python3 -m pip install pycryptodome."
+        ),
+        request_id="crypto",
+    )
+    assert response["ok"] is False
+    assert response["requestId"] == "crypto"
+    assert response["error"]["code"] == "crypto-dependency-missing"
+    assert "pycryptodome" in response["error"]["message"].lower()
 
 
 def test_envelope_inspection_does_not_require_the_file_password() -> None:

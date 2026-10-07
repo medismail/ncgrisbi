@@ -81,8 +81,10 @@ async function submitPassword() {
     const failure = apiError(error)
     errorMessage.value = failure.code === 'invalid-password'
       ? 'The Grisbi file password is incorrect.'
-      : failure.message
-    password.value = ''
+      : failure.code === 'crypto-dependency-missing'
+        ? 'Encrypted Grisbi files require PyCryptodome on the Nextcloud server. Install it for the Python environment used by Nextcloud (for example: python3 -m pip install pycryptodome), then retry.'
+        : failure.message
+    if (failure.code !== 'crypto-dependency-missing') password.value = ''
     await nextTick()
     passwordField.value?.focus?.()
   } finally {

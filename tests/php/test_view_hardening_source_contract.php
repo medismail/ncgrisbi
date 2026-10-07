@@ -57,6 +57,8 @@ view_check(str_contains($password, "store.dispatch('validateFilePassword'"), 'pa
 view_check(str_contains($password, 'submitting'), 'password loading state is missing');
 view_check(str_contains($password, 'password-error'), 'password error feedback is missing');
 view_check(!str_contains($password, 'Password placeholder'), 'placeholder copy remains on password screen');
+view_check(str_contains($password, "'crypto-dependency-missing'"), 'password screen does not handle missing crypto support');
+view_check(str_contains($password, 'python3 -m pip install pycryptodome'), 'password screen does not show PyCryptodome installation guidance');
 
 view_check(str_contains($history, 'return Array.isArray(parsed)'), 'history parser does not guarantee an array');
 view_check(str_contains($history, 'openedAt'), 'recent history ordering timestamp is missing');
