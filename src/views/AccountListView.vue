@@ -27,8 +27,8 @@
         </template>
         <template #default>
           <NcAppNavigationItem
-            :name="accountTotalsLabel(account)"
-            :title="accountTotalsLabel(account)"
+            :name="accountTotalsLabel(account, false)"
+            :title="accountTotalsLabel(account, true)"
           />
         </template>
       </NcAppNavigationItem>
@@ -120,8 +120,12 @@ function money(value, account) {
   return formatter.format(number(value))
 }
 
-function accountTotalsLabel(account) {
-  return `T: ${money(account.total?.total_amount, account)} · C: ${money(account.total?.total_marked_amount, account)}`
+function accountTotalsLabel(account, full) {
+  if (full) {
+    return `Total: ${money(account.total?.total_amount, account)} · Checked: ${money(account.total?.total_marked_amount, account)}`
+  } else {
+    return `T: ${money(account.total?.total_amount, account)} · C: ${money(account.total?.total_marked_amount, account)}`
+  }
 }
 
 function pendingDiscardPrompt(context) {
