@@ -37,6 +37,10 @@ const wire = {
     '10', '07/15/2026', null, '-40.00', '1', '0', '0', '1',
     'Current-account transfer', null, 0, null, null, '0', '11', null,
     4, '2', '4',
+  ], [
+    '9', '07/01/2026', null, '-5.00', '1', '0', '0', '1',
+    'Older current-account transaction', null, 0, null, null, '0', '0', null,
+    0, null, null,
   ]],
   H: [
     ['1', '2', '999.00', '0', '0', '2', 'Wrong account', null, null, null, null],
@@ -51,6 +55,7 @@ const snapshot = decodeCompactSnapshot(wire)
 const preferred = snapshot.completionByPartyId['1']
 assert.equal(preferred.sourceAccountId, '1')
 assert.equal(preferred.amount, '-40.00')
+assert.equal(preferred.note, 'Current-account transfer')
 assert.equal(preferred.transferAccountId, '2')
 assert.equal(preferred.paymentMethodId, '1')
 assert.equal(preferred.targetPaymentMethodId, '4')

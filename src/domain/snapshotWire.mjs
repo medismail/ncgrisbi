@@ -1,4 +1,4 @@
-import { sortTransactionsRecentFirst } from './transactionOrdering.mjs'
+import { compareTransactionsRecentFirst } from './transactionOrdering.mjs'
 
 const TX = {
   id: 0,
@@ -186,18 +186,20 @@ export function decodeCompactSnapshot(wire) {
     }
   }
 
-  // Always prefer the latest transaction from the account currently being edited.
-  // The compact H fallback can come from another account and older XML element
-  // truthiness rules could incorrectly select it even when a local transaction exists.
-  const completedParties = new Set()
-  const preferredPartyIdByName = new Map()
-  for (const transaction of sortTransactionsRecentFirst(transactions)) {
+  // Find the latest current-account transaction per party in one pass.
+  // This avoids sorting the full transaction array during every account load.
+  const latestByPartyId = new Map()
+  for (const transaction of transactions) {
     const partyId = String(transaction.partyId ?? '0')
-    if (partyId === '0'
-      || completedParties.has(partyId)
-      || transaction.splitMotherId != null) {
-      continue
+    if (partyId === '0' || transaction.splitMotherId != null) continue
+    const current = latestByPartyId.get(partyId)
+    if (!current || compareTransactionsRecentFirst(transaction, current) < 0) {
+      latestByPartyId.set(partyId, transaction)
     }
+  }
+
+  const preferredByPartyName = new Map()
+  for (const [partyId, transaction] of latestByPartyId) {
     completionByPartyId[partyId] = {
       partyId,
       sourceAccountId: account.id,
@@ -214,13 +216,18 @@ export function decodeCompactSnapshot(wire) {
         ? transaction.transferPaymentMethodId
         : null,
     }
-    completedParties.add(partyId)
 
     const partyNameKey = normalizePartyName(partiesById.get(partyId)?.name)
-    if (partyNameKey && !preferredPartyIdByName.has(partyNameKey)) {
-      preferredPartyIdByName.set(partyNameKey, partyId)
+    if (!partyNameKey) continue
+    const currentPreferred = preferredByPartyName.get(partyNameKey)
+    if (!currentPreferred
+      || compareTransactionsRecentFirst(transaction, currentPreferred.transaction) < 0) {
+      preferredByPartyName.set(partyNameKey, { partyId, transaction })
     }
   }
+  const preferredPartyIdByName = new Map(
+    [...preferredByPartyName].map(([name, value]) => [name, value.partyId]),
+  )
 
   // Grisbi files can contain duplicate payee records with the same visible name.
   // Mark the duplicate that has the newest current-account transaction as preferred,

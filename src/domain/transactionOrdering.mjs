@@ -1,7 +1,14 @@
-const TEXT_COLLATOR = new Intl.Collator(undefined, {
-  sensitivity: 'base',
-  numeric: true,
-})
+let textCollator = null
+
+function getTextCollator() {
+  if (!textCollator) {
+    textCollator = new Intl.Collator(undefined, {
+      sensitivity: 'base',
+      numeric: true,
+    })
+  }
+  return textCollator
+}
 
 function dateKey(value) {
   const text = String(value ?? '').trim()
@@ -67,7 +74,7 @@ function compareTextMissingLast(left, right) {
   if (!left && !right) return 0
   if (!left) return 1
   if (!right) return -1
-  return TEXT_COLLATOR.compare(left, right)
+  return getTextCollator().compare(left, right)
 }
 
 function compareRecentRecords(left, right) {

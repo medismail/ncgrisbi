@@ -65,7 +65,8 @@ phase8a_check(str_contains($view, '<option value="party">Party</option>'), 'part
 phase8a_check(str_contains($view, '<option value="category">Category</option>'), 'category sort option is missing');
 phase8a_check(str_contains($order, 'compareRecentRecords') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 date then transaction-number fallback is missing');
 phase8a_check(str_contains($order, 'comparePartyRecords') && str_contains($order, 'compareCategoryRecords'), 'party/category sort comparators are missing');
-phase8a_check(str_contains($order, 'TEXT_COLLATOR') && str_contains($order, 'orderingRecord'), 'text sort keys are not precomputed efficiently');
+phase8a_check(str_contains($order, 'getTextCollator()') && str_contains($order, 'orderingRecord'), 'text sorting is not initialized lazily or keys are not precomputed efficiently');
+phase8a_check(str_contains($view, "sortMode.value = 'date'"), 'account switching does not reset expensive text sorting to Date');
 phase8a_check(str_contains($view, 'const orderedRows = computed'), 'transaction ordering is not cached separately from filtering');
 
 phase8a_check(str_contains($view, 'remain preserved in this browser'), 'UI-97 ETag conflict does not explicitly preserve drafts');

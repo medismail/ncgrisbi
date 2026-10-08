@@ -90,7 +90,9 @@ view_check(str_contains($autocomplete, "defineExpose({ focus })"), 'autocomplete
 view_check(str_contains($autocomplete, 'completionRank'), 'autocomplete does not rank current-account completion first');
 view_check(str_contains($autocomplete, 'preferredCompletionPartyId'), 'duplicate payee selection does not resolve to the preferred current-account ID');
 
-view_check(str_contains($snapshotWire, 'sortTransactionsRecentFirst(transactions)'), 'same-account completion is not recent-first');
+view_check(str_contains($snapshotWire, 'compareTransactionsRecentFirst(transaction, current)'), 'same-account completion does not select the latest transaction');
+view_check(!str_contains($snapshotWire, 'sortTransactionsRecentFirst(transactions)'), 'account snapshot decoding still sorts the full transaction list for completion');
+view_check(str_contains($snapshotWire, 'latestByPartyId'), 'same-account completion is not selected in one linear pass');
 view_check(str_contains($snapshotWire, 'sourceAccountId: account.id'), 'same-account completion does not override cross-account fallback');
 view_check(str_contains($snapshotWire, 'targetPaymentMethodId'), 'transfer counterpart payment is missing from completion hints');
 view_check(str_contains($snapshotWire, 'preferredPartyIdByName'), 'duplicate payees are not grouped by visible name');

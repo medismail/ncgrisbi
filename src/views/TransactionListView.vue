@@ -858,6 +858,7 @@ watch(() => route.params.id, async newId => {
     return
   }
   selectedAccountId.value = String(newId)
+  sortMode.value = 'date'
   await loadSnapshot()
 })
 </script>
