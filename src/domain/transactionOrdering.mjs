@@ -1,3 +1,8 @@
+const TEXT_COLLATOR = new Intl.Collator(undefined, {
+  sensitivity: 'base',
+  numeric: true,
+})
+
 function dateKey(value) {
   const text = String(value ?? '').trim()
   let match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/u)
@@ -30,7 +35,11 @@ function localSequence(row) {
   return match ? Number(match[1]) : 0
 }
 
-function orderingRecord(row, index) {
+function normalizedText(value) {
+  return String(value ?? '').normalize('NFKC').trim().replace(/\s+/gu, ' ')
+}
+
+function baseOrderingRecord(row, index) {
   return {
     row,
     index,
@@ -41,7 +50,27 @@ function orderingRecord(row, index) {
   }
 }
 
-function compareRecords(left, right) {
+function orderingRecord(row, index, mode) {
+  const record = baseOrderingRecord(row, index)
+  if (mode === 'party') {
+    record.primary = normalizedText(row?.partyName)
+  } else if (mode === 'category') {
+    record.primary = row?.isTransfer
+      ? 'Transfer'
+      : normalizedText(row?.categoryName)
+    record.secondary = normalizedText(row?.subcategoryName)
+  }
+  return record
+}
+
+function compareTextMissingLast(left, right) {
+  if (!left && !right) return 0
+  if (!left) return 1
+  if (!right) return -1
+  return TEXT_COLLATOR.compare(left, right)
+}
+
+function compareRecentRecords(left, right) {
   const dateDifference = right.date - left.date
   if (dateDifference) return dateDifference
 
@@ -60,13 +89,40 @@ function compareRecords(left, right) {
   return keyDifference || right.index - left.index
 }
 
+function comparePartyRecords(left, right) {
+  const partyDifference = compareTextMissingLast(left.primary, right.primary)
+  return partyDifference || compareRecentRecords(left, right)
+}
+
+function compareCategoryRecords(left, right) {
+  const categoryDifference = compareTextMissingLast(left.primary, right.primary)
+  if (categoryDifference) return categoryDifference
+
+  const subcategoryDifference = compareTextMissingLast(left.secondary, right.secondary)
+  return subcategoryDifference || compareRecentRecords(left, right)
+}
+
 export function compareTransactionsRecentFirst(left, right) {
-  return compareRecords(orderingRecord(left, 0), orderingRecord(right, 0))
+  return compareRecentRecords(
+    orderingRecord(left, 0, 'date'),
+    orderingRecord(right, 0, 'date'),
+  )
+}
+
+export function sortTransactions(rows, mode = 'date') {
+  const normalizedMode = ['party', 'category'].includes(mode) ? mode : 'date'
+  const compare = normalizedMode === 'party'
+    ? comparePartyRecords
+    : normalizedMode === 'category'
+      ? compareCategoryRecords
+      : compareRecentRecords
+
+  return rows
+    .map((row, index) => orderingRecord(row, index, normalizedMode))
+    .sort(compare)
+    .map(record => record.row)
 }
 
 export function sortTransactionsRecentFirst(rows) {
-  return rows
-    .map(orderingRecord)
-    .sort(compareRecords)
-    .map(record => record.row)
+  return sortTransactions(rows, 'date')
 }

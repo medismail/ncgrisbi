@@ -79,6 +79,15 @@
             <span :class="{ active: displayMode === 'detailed' }">Details</span>
           </button>
 
+          <label class="compact-control sort-control">
+            <span>Sort</span>
+            <select v-model="sortMode" aria-label="Transaction sort order">
+              <option value="date">Date</option>
+              <option value="party">Party</option>
+              <option value="category">Category</option>
+            </select>
+          </label>
+
           <label class="compact-control bank-filter">
             <span>Bank status</span>
             <select v-model="markFilter" aria-label="Bank status filter">
@@ -290,7 +299,7 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import TransactionEditorPanel from '@/components/transactions/TransactionEditorPanel.vue'
 import { snapshotAccountTotals } from '@/domain/accountTotals.mjs'
-import { sortTransactionsRecentFirst } from '@/domain/transactionOrdering.mjs'
+import { sortTransactions } from '@/domain/transactionOrdering.mjs'
 import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
 import {
   TRANSFER_CATEGORY,
@@ -326,6 +335,7 @@ const conflict = ref(false)
 const displayMode = ref('compact')
 const savedDisplayMode = ref('compact')
 const markFilter = ref('all')
+const sortMode = ref('date')
 const searchOpen = ref(false)
 const searchQuery = ref('')
 const searchInput = ref(null)
@@ -344,7 +354,7 @@ const recentSelections = reactive({
 let newSequence = 0
 let revertingRoute = false
 
-const orderedRows = computed(() => sortTransactionsRecentFirst(rows.value))
+const orderedRows = computed(() => sortTransactions(rows.value, sortMode.value))
 const displayedRows = computed(() => orderedRows.value.filter(row => {
   if (markFilter.value === 'unchecked' && Number(row.marked) !== 0) return false
   if (markFilter.value === 'checked' && Number(row.marked) !== 1) return false
@@ -880,6 +890,8 @@ watch(() => route.params.id, async newId => {
 .display-toggle span.active { background: var(--color-primary-element); color: var(--color-primary-element-text); }
 .compact-control { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: .86rem; font-weight: 600; }
 .compact-control select { min-height: 32px; max-width: 220px; }
+.sort-control { flex: none; }
+.sort-control select { width: 118px; }
 .bank-filter { flex: 1; }
 .bank-filter select { width: min(100%, 240px); }
 .action-menu { position: relative; flex: none; }
@@ -942,6 +954,8 @@ watch(() => route.params.id, async newId => {
   .display-toggle span { min-width: 50px; padding-inline: 5px; font-size: .78rem; }
   .compact-control > span { display: none; }
   .compact-control select { max-width: none; min-width: 0; }
+  .sort-control { flex: 0 1 118px; }
+  .sort-control select { width: 100%; }
   .bank-filter { flex: 1 1 auto; }
   .bank-filter select { width: 100%; }
   .transaction-header { display: none; }
@@ -976,6 +990,7 @@ watch(() => route.params.id, async newId => {
   .header-message { justify-content: flex-start; }
   .header-controls { gap: 6px; }
   .display-toggle span { min-width: 43px; }
+  .sort-control { flex-basis: 94px; }
   .search-popover { inset-inline: 0; width: 100%; }
 }
 </style>

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import {
+  sortTransactions,
+} from '../../src/domain/transactionOrdering.mjs'
+import {
   applyEditorDraft,
   applyPartyCompletionTrace,
   buildAccountDisplayModeOperation,
@@ -115,6 +118,18 @@ const snapshot = {
     transferPaymentMethodName: null,
   }],
 }
+
+const sortableRows = [
+  { key: '3', transactionId: '3', date: '07/12/2026', partyName: 'Zulu', categoryName: 'Food', subcategoryName: 'Dining', isTransfer: false },
+  { key: '2', transactionId: '2', date: '07/11/2026', partyName: 'Alpha', categoryName: 'Utilities', subcategoryName: 'Power', isTransfer: false },
+  { key: '1', transactionId: '1', date: '07/10/2026', partyName: 'Alpha', categoryName: 'Food', subcategoryName: 'Groceries', isTransfer: false },
+  { key: '4', transactionId: '4', date: '07/13/2026', partyName: '', categoryName: '', subcategoryName: '', isTransfer: false },
+  { key: '5', transactionId: '5', date: '07/09/2026', partyName: 'Beta', categoryName: 'Ignored', subcategoryName: '', isTransfer: true },
+]
+assert.deepEqual(sortTransactions(sortableRows, 'date').map(row => row.key), ['4', '3', '2', '1', '5'])
+assert.deepEqual(sortTransactions(sortableRows, 'party').map(row => row.key), ['1', '2', '5', '3', '4'])
+assert.deepEqual(sortTransactions(sortableRows, 'category').map(row => row.key), ['3', '1', '5', '2', '4'])
+assert.deepEqual(sortTransactions(sortableRows, 'unknown').map(row => row.key), ['4', '3', '2', '1', '5'])
 
 assert.equal(preferredDisplayMode({ linesPerTransaction: 1 }), 'compact')
 assert.equal(preferredDisplayMode({

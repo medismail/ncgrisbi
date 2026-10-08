@@ -58,9 +58,15 @@ phase8a_check(
     'UI-90 marked total is hidden by the mobile totals rule'
 );
 
-phase8a_check(str_contains($view, 'sortTransactionsRecentFirst(rows.value)'), 'UI-82 recent-first ordering is missing');
-phase8a_check(str_contains($order, 'dateDifference') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 does not sort date then transaction number');
-phase8a_check(str_contains($view, 'const orderedRows = computed'), 'UI-82 ordering is not cached separately from filtering');
+phase8a_check(str_contains($view, 'sortTransactions(rows.value, sortMode.value)'), 'transaction sort mode is not applied through the cached ordering layer');
+phase8a_check(str_contains($view, 'aria-label="Transaction sort order"'), 'transaction sort selector is missing');
+phase8a_check(str_contains($view, '<option value="date">Date</option>'), 'date sort option is missing');
+phase8a_check(str_contains($view, '<option value="party">Party</option>'), 'party sort option is missing');
+phase8a_check(str_contains($view, '<option value="category">Category</option>'), 'category sort option is missing');
+phase8a_check(str_contains($order, 'compareRecentRecords') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 date then transaction-number fallback is missing');
+phase8a_check(str_contains($order, 'comparePartyRecords') && str_contains($order, 'compareCategoryRecords'), 'party/category sort comparators are missing');
+phase8a_check(str_contains($order, 'TEXT_COLLATOR') && str_contains($order, 'orderingRecord'), 'text sort keys are not precomputed efficiently');
+phase8a_check(str_contains($view, 'const orderedRows = computed'), 'transaction ordering is not cached separately from filtering');
 
 phase8a_check(str_contains($view, 'remain preserved in this browser'), 'UI-97 ETag conflict does not explicitly preserve drafts');
 phase8a_check(str_contains($view, 'Reload & discard drafts'), 'UI-98 conflict reload action is not explicit');
