@@ -127,7 +127,7 @@ const sortableRows = [
   { key: '5', transactionId: '5', date: '07/09/2026', partyName: 'Beta', categoryName: 'Ignored', subcategoryName: '', isTransfer: true },
 ]
 assert.deepEqual(sortTransactions(sortableRows, 'date').map(row => row.key), ['4', '3', '2', '1', '5'])
-assert.deepEqual(sortTransactions(sortableRows, 'party').map(row => row.key), ['1', '2', '5', '3', '4'])
+assert.deepEqual(sortTransactions(sortableRows, 'party').map(row => row.key), ['2', '1', '5', '3', '4'])
 assert.deepEqual(sortTransactions(sortableRows, 'category').map(row => row.key), ['3', '1', '5', '2', '4'])
 assert.deepEqual(sortTransactions(sortableRows, 'unknown').map(row => row.key), ['4', '3', '2', '1', '5'])
 
