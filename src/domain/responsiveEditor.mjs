@@ -404,9 +404,21 @@ export function editorDraftChanged(draft, baseline) {
 }
 
 export function preferredDisplayMode(preferences) {
-  return Number(preferences?.linesPerTransaction ?? 1) > 1
-    || preferences?.twoLinesShowed
-    || preferences?.threeLinesShowed
+  return Number(preferences?.linesPerTransaction ?? 1) >= 2
     ? 'detailed'
     : 'compact'
+}
+
+export function buildAccountDisplayModeOperation(accountId, mode, savedMode) {
+  if (mode === savedMode) return null
+  if (!['compact', 'detailed'].includes(mode)) {
+    throw new EditorValidationError('Display mode must be compact or detailed.')
+  }
+  const id = String(accountId ?? '')
+  if (!id) throw new EditorValidationError('Account is required to save the display mode.')
+  return {
+    type: 'setAccountDisplayMode',
+    accountId: id,
+    mode,
+  }
 }

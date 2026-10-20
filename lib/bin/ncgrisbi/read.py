@@ -140,7 +140,7 @@ def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
             "Transaction %s amount" % (transaction.get("Nb") or "?"),
         )
         values["total_amount"] += amount
-        if transaction.get("Ma", "0") == "1":
+        if transaction.get("Ma", "0") in ("1", "2", "3"):
             values["total_marked_amount"] += amount
 
     result: List[Dict[str, Any]] = []
@@ -291,7 +291,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
             "Transaction %s amount" % transaction_id,
         )
         total_amount += amount
-        if transaction.get("Ma", "0") == "1":
+        if transaction.get("Ma", "0") in ("1", "2", "3"):
             total_marked_amount += amount
 
         party = context.parties.get(transaction.get("Pa") or "0")

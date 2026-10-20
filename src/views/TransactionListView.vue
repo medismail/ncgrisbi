@@ -17,11 +17,11 @@
             <strong>{{ totals.totalAmount }} {{ snapshot.account.currency.code }}</strong>
             <span>Checked: {{ totals.totalMarkedAmount }} {{ snapshot.account.currency.code }}</span>
             <span
-              v-if="pendingSummary.total"
+              v-if="pendingTotal"
               class="pending-count"
               :title="pendingDescription"
             >
-              {{ pendingSummary.total }} pending
+              {{ pendingTotal }} pending
             </span>
 
             <NcPopover
@@ -79,6 +79,15 @@
             <span :class="{ active: displayMode === 'detailed' }">Details</span>
           </button>
 
+          <label class="compact-control sort-control">
+            <span>Sort</span>
+            <select v-model="sortMode" aria-label="Transaction sort order">
+              <option value="date">Date</option>
+              <option value="party">Party</option>
+              <option value="category">Category</option>
+            </select>
+          </label>
+
           <label class="compact-control bank-filter">
             <span>Bank status</span>
             <select v-model="markFilter" aria-label="Bank status filter">
@@ -103,7 +112,7 @@
                 :disabled="saving || conflict || !pendingChanges"
                 @click="runAction('save', $event)"
               >
-                {{ saving ? 'Saving…' : `Save all${pendingSummary.total ? ` (${pendingSummary.total})` : ''}` }}
+                {{ saving ? 'Saving…' : `Save all${pendingTotal ? ` (${pendingTotal})` : ''}` }}
               </button>
               <button
                 type="button"
@@ -267,12 +276,13 @@
 
       <TransactionEditorPanel
         v-if="editorDraft"
+        :key="editorRowKey"
         v-model:draft="editorDraft"
         :snapshot="snapshot"
         :recent-selections="recentSelections"
         :auto-focus-party="editorDraft.isNew"
-        @apply="applyActiveDraft(false)"
-        @apply-add="applyActiveDraft(true)"
+        @apply="applyActiveDraft(false, $event)"
+        @apply-add="applyActiveDraft(true, $event)"
         @cancel="cancelActiveEditor"
         @recent="rememberSelection"
       />
@@ -288,11 +298,13 @@ import { useStore } from 'vuex'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import TransactionEditorPanel from '@/components/transactions/TransactionEditorPanel.vue'
-import { sortTransactionsRecentFirst } from '@/domain/transactionOrdering.mjs'
+import { snapshotAccountTotals } from '@/domain/accountTotals.mjs'
+import { sortTransactions } from '@/domain/transactionOrdering.mjs'
 import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
 import {
   TRANSFER_CATEGORY,
   applyEditorDraft,
+  buildAccountDisplayModeOperation,
   buildResponsiveMutationOperations,
   calculateTotals,
   cloneEditorDraft,
@@ -321,7 +333,9 @@ const message = ref('')
 const messageType = ref('info')
 const conflict = ref(false)
 const displayMode = ref('compact')
+const savedDisplayMode = ref('compact')
 const markFilter = ref('all')
+const sortMode = ref('date')
 const searchOpen = ref(false)
 const searchQuery = ref('')
 const searchInput = ref(null)
@@ -340,21 +354,25 @@ const recentSelections = reactive({
 let newSequence = 0
 let revertingRoute = false
 
-const orderedRows = computed(() => sortTransactionsRecentFirst(rows.value))
+const orderedRows = computed(() => sortTransactions(rows.value, sortMode.value))
 const displayedRows = computed(() => orderedRows.value.filter(row => {
   if (markFilter.value === 'unchecked' && Number(row.marked) !== 0) return false
   if (markFilter.value === 'checked' && Number(row.marked) !== 1) return false
   if (markFilter.value === 'locked' && ![2, 3].includes(Number(row.marked))) return false
   return matchesTransactionSearch(row, searchQuery.value)
 }))
+const displayModeDirty = computed(() => displayMode.value !== savedDisplayMode.value)
 const pendingChanges = computed(() => hasResponsivePendingChanges(rows.value)
-  || editorDraftChanged(editorDraft.value, editorBaseline.value))
+  || editorDraftChanged(editorDraft.value, editorBaseline.value)
+  || displayModeDirty.value)
 const pendingSummary = computed(() => pendingChangeSummary(rowsWithActiveDraft()))
+const pendingTotal = computed(() => pendingSummary.value.total + (displayModeDirty.value ? 1 : 0))
 const pendingDescription = computed(() => [
   pendingSummary.value.created ? `${pendingSummary.value.created} new` : '',
   pendingSummary.value.edited ? `${pendingSummary.value.edited} edited` : '',
   pendingSummary.value.marked ? `${pendingSummary.value.marked} checked/unchecked` : '',
   pendingSummary.value.deleted ? `${pendingSummary.value.deleted} deleted` : '',
+  displayModeDirty.value ? `${displayMode.value} view preference` : '',
 ].filter(Boolean).join(', '))
 const totals = computed(() => calculateTotals(
   rowsWithActiveDraft(),
@@ -390,7 +408,7 @@ function rowsWithActiveDraft() {
 function syncSharedPendingState() {
   store.commit('setTransactionPending', {
     active: pendingChanges.value,
-    total: pendingSummary.value.total,
+    total: pendingTotal.value,
     description: pendingDescription.value || (pendingChanges.value ? 'open transaction editor changes' : ''),
   })
 }
@@ -408,9 +426,12 @@ async function loadSnapshot() {
       filePassword: store.state.filePassword,
     })
     snapshot.value = response.snapshot
+    store.commit('updateAccountTotals', snapshotAccountTotals(response.snapshot?.account))
     etag.value = response.document.etag
     rows.value = createResponsiveDrafts(response.snapshot)
-    displayMode.value = preferredDisplayMode(response.snapshot.preferences)
+    const loadedDisplayMode = preferredDisplayMode(response.snapshot.preferences)
+    displayMode.value = loadedDisplayMode
+    savedDisplayMode.value = loadedDisplayMode
     markFilter.value = 'all'
     searchQuery.value = ''
     searchOpen.value = false
@@ -483,11 +504,12 @@ async function cancelActiveEditor() {
   if (key) await focusRow(key)
 }
 
-async function applyActiveDraft(addAnother) {
+async function applyActiveDraft(addAnother, draftPayload) {
   const key = editorRowKey.value
   const target = rows.value.find(item => item.key === key)
-  if (!target || !editorDraft.value) return
-  applyEditorDraft(target, editorDraft.value)
+  const draft = draftPayload || editorDraft.value
+  if (!target || !draft) return
+  applyEditorDraft(target, draft)
   clearValidationFor(target)
   closeEditorState()
   if (addAnother) addTransaction()
@@ -680,7 +702,7 @@ function handleRowKeydown(event, row) {
 }
 
 function discardPrompt(context) {
-  const count = pendingSummary.value.total
+  const count = pendingTotal.value
   const details = pendingDescription.value || 'open editor changes'
   return `${context} This will permanently discard ${count} local pending change${count === 1 ? '' : 's'} (${details}). This cannot be undone.`
 }
@@ -694,10 +716,11 @@ async function submitOperations(operations, confirmed = false) {
       operations,
     })
     etag.value = response.document.etag
+    store.commit('updateAccountTotals', response.accountTotals)
     validationErrorKey.value = null
     validationErrorMessage.value = ''
     await loadSnapshot()
-    setMessage('All pending transactions were saved in one file write.', 'success')
+    setMessage('All pending changes were saved in one file write.', 'success')
     return true
   } catch (error) {
     const failure = apiError(error)
@@ -713,7 +736,7 @@ async function submitOperations(operations, confirmed = false) {
     conflict.value = failure.code === 'etag-conflict'
     setMessage(
       conflict.value
-        ? `The GSB file changed elsewhere. ${pendingSummary.value.total} local draft change${pendingSummary.value.total === 1 ? '' : 's'} remain preserved in this browser.`
+        ? `The GSB file changed elsewhere. ${pendingTotal.value} local pending change${pendingTotal.value === 1 ? '' : 's'} remain preserved in this browser.`
         : failure.message,
       'error',
     )
@@ -738,6 +761,12 @@ async function saveChanges() {
   let operations
   try {
     operations = buildResponsiveMutationOperations(prospectiveRows, snapshot.value)
+    const displayOperation = buildAccountDisplayModeOperation(
+      snapshot.value?.account?.id,
+      displayMode.value,
+      savedDisplayMode.value,
+    )
+    if (displayOperation) operations.push(displayOperation)
   } catch (error) {
     await revealValidationError(error)
     return
@@ -803,7 +832,7 @@ onBeforeRouteLeave(() => {
 })
 
 watch(
-  () => [pendingChanges.value, pendingSummary.value.total, pendingDescription.value],
+  () => [pendingChanges.value, pendingTotal.value, pendingDescription.value],
   syncSharedPendingState,
   { immediate: true },
 )
@@ -829,6 +858,7 @@ watch(() => route.params.id, async newId => {
     return
   }
   selectedAccountId.value = String(newId)
+  sortMode.value = 'date'
   await loadSnapshot()
 })
 </script>
@@ -861,6 +891,8 @@ watch(() => route.params.id, async newId => {
 .display-toggle span.active { background: var(--color-primary-element); color: var(--color-primary-element-text); }
 .compact-control { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: .86rem; font-weight: 600; }
 .compact-control select { min-height: 32px; max-width: 220px; }
+.sort-control { flex: none; }
+.sort-control select { width: 118px; }
 .bank-filter { flex: 1; }
 .bank-filter select { width: min(100%, 240px); }
 .action-menu { position: relative; flex: none; }
@@ -923,6 +955,8 @@ watch(() => route.params.id, async newId => {
   .display-toggle span { min-width: 50px; padding-inline: 5px; font-size: .78rem; }
   .compact-control > span { display: none; }
   .compact-control select { max-width: none; min-width: 0; }
+  .sort-control { flex: 0 1 118px; }
+  .sort-control select { width: 100%; }
   .bank-filter { flex: 1 1 auto; }
   .bank-filter select { width: 100%; }
   .transaction-header { display: none; }
@@ -957,6 +991,7 @@ watch(() => route.params.id, async newId => {
   .header-message { justify-content: flex-start; }
   .header-controls { gap: 6px; }
   .display-toggle span { min-width: 43px; }
+  .sort-control { flex-basis: 94px; }
   .search-popover { inset-inline: 0; width: 100%; }
 }
 </style>

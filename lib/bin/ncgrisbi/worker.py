@@ -168,6 +168,7 @@ def execute_request(
             "outcomes": outcomes,
             "warnings": list(result.warnings),
             "changedRecords": result.changed_records,
+            "accountTotals": result.account_totals,
         },
         output,
     )

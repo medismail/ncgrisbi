@@ -1,6 +1,16 @@
-from Cryptodome.Cipher import DES
-from Cryptodome.Cipher import AES
-from Cryptodome.Util.Padding import pad, unpad
+try:
+    # pycryptodomex exposes the isolated Cryptodome namespace.
+    from Cryptodome.Cipher import DES
+    from Cryptodome.Cipher import AES
+    from Cryptodome.Util.Padding import pad, unpad
+except ModuleNotFoundError as exc:
+    if exc.name != "Cryptodome" and not str(exc.name).startswith("Cryptodome."):
+        raise
+    # pycryptodome exposes the Crypto namespace. Support both packages so the
+    # dependency guidance shown by NCGrisbi works with standard PyCryptodome.
+    from Crypto.Cipher import DES
+    from Crypto.Cipher import AES
+    from Crypto.Util.Padding import pad, unpad
 from hashlib import sha256
 from getpass import getpass
 import struct

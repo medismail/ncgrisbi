@@ -136,6 +136,14 @@ namespace {
     check_service($locks->lastAcquireType === ILockingProvider::LOCK_EXCLUSIVE, 'mutation did not use exclusive lock');
     check_service($locks->locked === false, 'service did not release the lock');
     check_service($result['etag'] === 'etag-2', 'new etag was not returned');
+    check_service(
+        $result['accountTotals']['1']['total_amount'] === -15.0,
+        'service did not propagate account totals'
+    );
+    check_service(
+        $result['accountTotals']['1']['total_marked_amount'] === -10.0,
+        'service did not propagate marked account total'
+    );
 
     try {
         $service->mutate(

@@ -642,7 +642,7 @@ export function calculateTotals(rows, precision = 2, initialBalance = '0') {
     const amount = Number(row.amount)
     if (!Number.isFinite(amount)) continue
     total += amount
-    if (Number(row.marked) === 1) marked += amount
+    if (Number(row.marked) > 0) marked += amount
   }
   return {
     totalAmount: total.toFixed(precision),

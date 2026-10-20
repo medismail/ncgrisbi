@@ -241,7 +241,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
             "Transaction %s amount" % transaction_id,
         )
         total += amount
-        if attributes.get("Ma", "0") == "1":
+        if attributes.get("Ma", "0") in ("1", "2", "3"):
             marked_total += amount
 
         transfer_id = attributes.get("Trt", "0")

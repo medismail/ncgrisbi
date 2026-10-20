@@ -5,7 +5,7 @@ import importlib
 from dataclasses import dataclass
 from typing import Optional
 
-from .errors import EnvelopeError, PasswordRequiredError
+from .errors import CryptoDependencyError, EnvelopeError, PasswordRequiredError
 
 GZIP_MAGIC = b"\x1f\x8b"
 V2_MARKER = b"Grisbi encryption v2: "
@@ -32,7 +32,18 @@ def _load_crypto_module():
     Plain and gzip-only files must remain usable even when the optional DES
     dependency is not installed. The module is loaded only for encrypted data.
     """
-    return importlib.import_module("gsb_decode")
+    try:
+        return importlib.import_module("gsb_decode")
+    except ModuleNotFoundError as exc:
+        missing = str(exc.name or "")
+        if missing == "Crypto" or missing.startswith("Crypto.") \
+                or missing == "Cryptodome" or missing.startswith("Cryptodome."):
+            raise CryptoDependencyError(
+                "Encrypted Grisbi files require PyCryptodome. "
+                "Install it for the Python environment used by Nextcloud "
+                "(for example: python3 -m pip install pycryptodome) and retry."
+            ) from exc
+        raise
 
 
 def _decompress(raw_bytes: bytes) -> bytes:
@@ -88,6 +99,8 @@ def decode_envelope(raw_bytes: bytes, password: Optional[str] = None) -> Decoded
                 raise EnvelopeError("Unsupported encryption version: %r" % state.version)
         except PasswordRequiredError:
             raise
+        except CryptoDependencyError:
+            raise
         except EnvelopeError:
             raise
         except Exception as exc:
@@ -119,6 +132,8 @@ def encode_envelope(
             else:
                 raise EnvelopeError("Unsupported encryption version: %r" % state.version)
         except PasswordRequiredError:
+            raise
+        except CryptoDependencyError:
             raise
         except EnvelopeError:
             raise

@@ -41,7 +41,7 @@ final class GrisbiProcess {
 
     /**
      * @param list<array<string, mixed>> $operations
-     * @return array{content: string, changed: bool, outcomes: array<int, mixed>, sha256: string}
+     * @return array{content: string, changed: bool, outcomes: array<int, mixed>, accountTotals: array<string, mixed>, sha256: string}
      */
     public function mutate(array $operations, string $fileContent): array {
         [$header, $payload, $sha256] = $this->requestProtocol([
@@ -54,6 +54,9 @@ final class GrisbiProcess {
             'changed' => (bool)($header['changed'] ?? true),
             'outcomes' => is_array($header['outcomes'] ?? null)
                 ? $header['outcomes']
+                : [],
+            'accountTotals' => is_array($header['accountTotals'] ?? null)
+                ? $header['accountTotals']
                 : [],
             'sha256' => $sha256,
         ];

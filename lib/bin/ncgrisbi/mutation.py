@@ -11,6 +11,7 @@ from ._mutation_core import (
     _canonical_id,
     _clean_name,
     _date,
+    _decimal,
     _name_key,
     _nullable,
     _required,
@@ -20,6 +21,53 @@ from .errors import MutationError
 from .formats import SupportLevel
 from .parser import parse_document
 from .validator import assert_valid_document, warning_issues
+
+
+def _affected_account_totals(
+    affected: set[str],
+    final_document: Any,
+) -> Dict[str, Dict[str, float]]:
+    if not affected:
+        return {}
+
+    totals: Dict[str, Dict[str, Decimal]] = {
+        account_id: {
+            "total_amount": Decimal("0"),
+            "total_marked_amount": Decimal("0"),
+        }
+        for account_id in affected
+    }
+    for element in final_document.root:
+        if element.tag == "Account":
+            account_id = element.get("Number") or ""
+            values = totals.get(account_id)
+            if values is not None:
+                values["total_amount"] += _decimal(
+                    element.get("Initial_balance", "0"),
+                    "Account Initial balance",
+                )
+            continue
+        if element.tag != "Transaction":
+            continue
+        account_id = element.get("Ac") or ""
+        values = totals.get(account_id)
+        if values is None:
+            continue
+        amount = _decimal(
+            element.get("Am"),
+            "Transaction %s amount" % (element.get("Nb") or "?"),
+        )
+        values["total_amount"] += amount
+        if element.get("Ma", "0") in ("1", "2", "3"):
+            values["total_marked_amount"] += amount
+
+    return {
+        account_id: {
+            "total_amount": float(values["total_amount"]),
+            "total_marked_amount": float(values["total_marked_amount"]),
+        }
+        for account_id, values in totals.items()
+    }
 
 
 class MutationSession(MutationCoreSession):
@@ -37,6 +85,8 @@ class MutationSession(MutationCoreSession):
         self.transactions: Dict[str, Dict[str, str]] = {}
         self.original_transactions: Dict[str, Dict[str, str]] = {}
         self.transaction_spans: Dict[str, Any] = {}
+        self.account_spans: Dict[str, Any] = {}
+        self.account_line_updates: Dict[str, str] = {}
 
         # Parser spans and root children have already been proven to align. Build
         # all mutation indexes in one pass instead of scanning each tag twice.
@@ -47,6 +97,7 @@ class MutationSession(MutationCoreSession):
                 key = element.get("Number")
                 if key:
                     self.accounts[key] = attributes
+                    self.account_spans[key] = span
             elif tag == "Currency":
                 key = element.get("Nb")
                 if key:
@@ -418,7 +469,7 @@ def apply_mutations(
     session = MutationSession(document)
     for client_index, raw in enumerate(operations):
         session.apply(raw, client_index)
-    output, changed_records, final_document = session.render(password=password)
+    output, changed_records, final_document, affected_accounts = session.render(password=password)
     warnings = tuple(
         {
             "code": issue.code,
@@ -434,6 +485,7 @@ def apply_mutations(
         tuple(session.outcomes),
         warnings,
         changed_records,
+        _affected_account_totals(affected_accounts, final_document),
     )
 
 

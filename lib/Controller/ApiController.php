@@ -126,9 +126,15 @@ final class ApiController extends Controller {
                 $operations,
                 $filePassword !== '' ? $filePassword : null
             );
+            $accountTotals = is_array($result['accountTotals'] ?? null)
+                ? $result['accountTotals']
+                : [];
+            unset($result['accountTotals']);
+
             return new JSONResponse([
                 'success' => true,
                 'document' => $result,
+                'accountTotals' => $accountTotals,
             ]);
         } catch (\Throwable $e) {
             return $this->errorResponse($e);
@@ -197,6 +203,7 @@ final class ApiController extends Controller {
             $status = match ($code) {
                 'mutation-conflict' => 409,
                 'record-not-found' => 404,
+                'crypto-dependency-missing' => 503,
                 'invalid-protocol', 'internal-error' => 500,
                 default => 422,
             };

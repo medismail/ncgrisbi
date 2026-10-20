@@ -6,6 +6,7 @@ import struct
 from typing import Any, BinaryIO, Dict, List, Mapping, Optional, Tuple
 
 from .errors import (
+    CryptoDependencyError,
     EnvelopeError,
     GsbError,
     MutationConflictError,
@@ -126,6 +127,8 @@ def error_response(exc: Exception, request_id: Any = None) -> Dict[str, Any]:
         code = "invalid-mutation"
     elif isinstance(exc, PasswordRequiredError):
         code = "password-required"
+    elif isinstance(exc, CryptoDependencyError):
+        code = "crypto-dependency-missing"
     elif isinstance(exc, UnsupportedFileVersionError):
         code = "unsupported-file-version"
     elif isinstance(exc, EnvelopeError):

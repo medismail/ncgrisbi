@@ -9,6 +9,7 @@ from .envelope import (
 )
 from .errors import (
     ConfirmationRequiredError,
+    CryptoDependencyError,
     EnvelopeError,
     GsbError,
     MarkStateError,
@@ -45,6 +46,7 @@ from .writer import LosslessPatchWriter, Patch
 
 __all__ = [
     "ConfirmationRequiredError",
+    "CryptoDependencyError",
     "DecodedEnvelope",
     "ElementSpan",
     "EnvelopeError",

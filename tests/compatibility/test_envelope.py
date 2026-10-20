@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "bin"))
 
 from ncgrisbi import (
+    CryptoDependencyError,
     EnvelopeError,
     EnvelopeState,
     LosslessPatchWriter,
@@ -104,3 +105,24 @@ def test_encrypted_files_require_a_password() -> None:
         decode_envelope(raw)
     with pytest.raises(EnvelopeError):
         decode_envelope(raw, password="wrong")
+
+
+def test_missing_crypto_dependency_has_actionable_error(monkeypatch) -> None:
+    import ncgrisbi.envelope as envelope_module
+
+    original_import = envelope_module.importlib.import_module
+
+    def missing_crypto(name):
+        if name == "gsb_decode":
+            error = ModuleNotFoundError("No module named 'Crypto'")
+            error.name = "Crypto"
+            raise error
+        return original_import(name)
+
+    monkeypatch.setattr(envelope_module.importlib, "import_module", missing_crypto)
+
+    with pytest.raises(CryptoDependencyError) as failure:
+        decode_envelope(MARKER + b"ciphertext", password="secret")
+
+    assert "PyCryptodome" in str(failure.value)
+    assert "python3 -m pip install pycryptodome" in str(failure.value)

@@ -4,6 +4,7 @@ import {
   allowReconciledMutations,
   applyPartyCompletion,
   buildMutationOperations,
+  calculateTotals,
   createDrafts,
   newTransactionDraft,
   paymentMethodsForAmount,
@@ -164,6 +165,17 @@ operations = buildMutationOperations(fiftyDrafts, fiftySnapshot)
 assert.equal(operations.length, 1)
 assert.equal(operations[0].type, 'setTransactionMarks')
 assert.equal(operations[0].marks.length, 50)
+
+const checkedTotals = calculateTotals([
+  { amount: '-10.00', marked: 1, deleted: false },
+  { amount: '-2.00', marked: 2, deleted: false },
+  { amount: '-3.00', marked: 3, deleted: false },
+  { amount: '-4.00', marked: 0, deleted: false },
+], 2, '100.00')
+assert.deepEqual(checkedTotals, {
+  totalAmount: '81.00',
+  totalMarkedAmount: '-15.00',
+})
 
 const decoded = decodeCompactSnapshot({
   v: 2,

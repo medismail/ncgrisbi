@@ -81,6 +81,7 @@ import { getLanguage } from '@nextcloud/l10n'
 
 const store = useStore()
 const languageCode = getLanguage()
+const moneyFormatters = new Map()
 const accounts = computed(() => Array.isArray(store.state.accounts) ? store.state.accounts : [])
 
 function number(value) {
@@ -93,10 +94,15 @@ function currencyCode(account) {
 }
 
 function money(amount, currency) {
-  return new Intl.NumberFormat(languageCode, {
-    style: 'currency',
-    currency,
-  }).format(number(amount))
+  let formatter = moneyFormatters.get(currency)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(languageCode, {
+      style: 'currency',
+      currency,
+    })
+    moneyFormatters.set(currency, formatter)
+  }
+  return formatter.format(number(amount))
 }
 
 function accountDifference(account) {

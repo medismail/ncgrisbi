@@ -15,7 +15,8 @@ from ncgrisbi.mutation import apply_mutations
 from ncgrisbi.parser import parse_document
 from ncgrisbi.snapshot import build_account_snapshot
 from ncgrisbi.validator import assert_valid_document
-from ncgrisbi.worker import execute_request
+from ncgrisbi.errors import CryptoDependencyError
+from ncgrisbi.worker import error_response, execute_request
 from ncgrisbi.writer import LosslessPatchWriter
 
 
@@ -151,6 +152,104 @@ def test_mutation_creation_uses_profile_defaults_and_order() -> None:
     assert transaction.get("Exr") == "0.00"
     assert transaction.get("Trt") == "0"
     assert transaction.get("Mo") == "0"
+    assert result.account_totals == {
+        "1": {
+            "total_amount": -15.0,
+            "total_marked_amount": -10.0,
+        }
+    }
+
+
+def test_checked_totals_include_all_grisbi_checked_states() -> None:
+    extra_transactions = (
+        TRANSACTION_TEMPLATE.format(
+            account="1",
+            number="3",
+            amount="-2.00",
+            note="telepointed",
+            payment="1",
+            marked="2",
+        )
+        + "\n"
+        + TRANSACTION_TEMPLATE.format(
+            account="1",
+            number="4",
+            amount="-3.00",
+            note="reconciled",
+            payment="1",
+            marked="3",
+        )
+        + "\n"
+    ).encode("utf-8")
+    payload = fixture_bytes().replace(b"</Grisbi>", extra_transactions + b"</Grisbi>")
+
+    header, output = execute_request(
+        {"version": 1, "requestId": "checked-states", "command": "listAccounts"},
+        payload,
+        password=None,
+    )
+    assert header["ok"] is True
+    account = json.loads(output)[0]
+    assert account["total"]["total_amount"] == -15.0
+    assert account["total"]["total_marked_amount"] == -15.0
+
+    snapshot = build_account_snapshot(parse_document(payload), "1")
+    assert snapshot["a"][8] == "-15.00"
+    assert snapshot["a"][9] == "-15.00"
+
+    result = apply_mutations(
+        payload,
+        [{
+            "type": "createTransaction",
+            "accountId": "1",
+            "date": "01/05/2026",
+            "amount": "-5.00",
+            "paymentMethodId": "1",
+            "partyId": "1",
+            "categoryId": "1",
+            "subcategoryId": "1",
+            "marked": 0,
+        }],
+    )
+    assert result.account_totals["1"] == {
+        "total_amount": -20.0,
+        "total_marked_amount": -15.0,
+    }
+
+
+def test_account_display_mode_is_saved_per_account_without_total_work() -> None:
+    detailed = apply_mutations(
+        fixture_bytes(),
+        [{
+            "type": "setAccountDisplayMode",
+            "accountId": "1",
+            "mode": "detailed",
+        }],
+    )
+    detailed_document = parse_document(detailed.raw_bytes)
+    accounts = {
+        element.get("Number"): element
+        for element in detailed_document.root.findall("Account")
+    }
+    assert accounts["1"].get("Lines_per_transaction") == "2"
+    assert accounts["2"].get("Lines_per_transaction") == "1"
+    assert detailed.account_totals == {}
+    assert detailed.changed_records == 1
+
+    compact = apply_mutations(
+        detailed.raw_bytes,
+        [{
+            "type": "setAccountDisplayMode",
+            "accountId": "1",
+            "mode": "compact",
+        }],
+    )
+    compact_document = parse_document(compact.raw_bytes)
+    assert (
+        compact_document.root.findall("Account")[0].get("Lines_per_transaction")
+        == "1"
+    )
+    assert compact.account_totals == {}
 
 
 def test_snapshot_prefers_current_account_completion() -> None:
@@ -205,6 +304,39 @@ def test_framed_worker_serves_all_read_models_from_one_document_pipeline() -> No
         password=None,
     )
     assert json.loads(output)["a"][0] == "1"
+
+    mutation_header, mutation_output = execute_request(
+        {
+            **base,
+            "command": "mutate",
+            "operations": [
+                {"type": "deleteTransaction", "transactionId": "1"},
+            ],
+        },
+        payload,
+        password=None,
+    )
+    assert mutation_header["accountTotals"] == {
+        "1": {
+            "total_amount": 0.0,
+            "total_marked_amount": 0.0,
+        }
+    }
+    assert mutation_output != payload
+
+
+def test_missing_crypto_dependency_has_dedicated_protocol_error() -> None:
+    response = error_response(
+        CryptoDependencyError(
+            "Encrypted Grisbi files require PyCryptodome. "
+            "Install it with python3 -m pip install pycryptodome."
+        ),
+        request_id="crypto",
+    )
+    assert response["ok"] is False
+    assert response["requestId"] == "crypto"
+    assert response["error"]["code"] == "crypto-dependency-missing"
+    assert "pycryptodome" in response["error"]["message"].lower()
 
 
 def test_envelope_inspection_does_not_require_the_file_password() -> None:

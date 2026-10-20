@@ -21,6 +21,10 @@ $responsiveCss = file_get_contents($root . '/src/styles/phase8a-responsive.css')
 phase8a_check(str_contains($view, 'DynamicScroller'), 'responsive list lost virtual scrolling');
 phase8a_check(str_contains($view, 'TransactionEditorPanel'), 'single responsive editor is missing');
 phase8a_check(str_contains($view, 'v-model:draft="editorDraft"'), 'editor draft does not use Vue two-way binding');
+phase8a_check(str_contains($view, ':key="editorRowKey"'), 'transaction editor is not remounted when switching rows');
+phase8a_check(str_contains($view, '@apply="applyActiveDraft(false, $event)"'), 'editor apply does not use the emitted draft payload');
+phase8a_check(str_contains($view, '@apply-add="applyActiveDraft(true, $event)"'), 'multi-entry apply does not use the emitted draft payload');
+phase8a_check(!str_contains($panel, '() => props.draft'), 'redundant deep draft watcher was reintroduced');
 phase8a_check(str_contains($view, 'class="action-menu"'), 'compact transaction action menu is missing');
 phase8a_check(str_contains($view, "runAction('add'"), 'action menu does not add transactions');
 phase8a_check(str_contains($view, "runAction('search'"), 'action menu does not open transaction search');
@@ -54,9 +58,16 @@ phase8a_check(
     'UI-90 marked total is hidden by the mobile totals rule'
 );
 
-phase8a_check(str_contains($view, 'sortTransactionsRecentFirst(rows.value)'), 'UI-82 recent-first ordering is missing');
-phase8a_check(str_contains($order, 'dateDifference') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 does not sort date then transaction number');
-phase8a_check(str_contains($view, 'const orderedRows = computed'), 'UI-82 ordering is not cached separately from filtering');
+phase8a_check(str_contains($view, 'sortTransactions(rows.value, sortMode.value)'), 'transaction sort mode is not applied through the cached ordering layer');
+phase8a_check(str_contains($view, 'aria-label="Transaction sort order"'), 'transaction sort selector is missing');
+phase8a_check(str_contains($view, '<option value="date">Date</option>'), 'date sort option is missing');
+phase8a_check(str_contains($view, '<option value="party">Party</option>'), 'party sort option is missing');
+phase8a_check(str_contains($view, '<option value="category">Category</option>'), 'category sort option is missing');
+phase8a_check(str_contains($order, 'compareRecentRecords') && str_contains($order, 'compareIntegerTextDesc'), 'UI-82 date then transaction-number fallback is missing');
+phase8a_check(str_contains($order, 'comparePartyRecords') && str_contains($order, 'compareCategoryRecords'), 'party/category sort comparators are missing');
+phase8a_check(str_contains($order, 'getTextCollator()') && str_contains($order, 'orderingRecord'), 'text sorting is not initialized lazily or keys are not precomputed efficiently');
+phase8a_check(str_contains($view, "sortMode.value = 'date'"), 'account switching does not reset expensive text sorting to Date');
+phase8a_check(str_contains($view, 'const orderedRows = computed'), 'transaction ordering is not cached separately from filtering');
 
 phase8a_check(str_contains($view, 'remain preserved in this browser'), 'UI-97 ETag conflict does not explicitly preserve drafts');
 phase8a_check(str_contains($view, 'Reload & discard drafts'), 'UI-98 conflict reload action is not explicit');
@@ -79,6 +90,11 @@ phase8a_check(str_contains($view, ':tabindex="row.key === selectedRowKey ? 0 : -
 
 phase8a_check(str_contains($view, 'pendingChangeSummary'), 'pending transaction summary is missing');
 phase8a_check(str_contains($view, 'preferredDisplayMode'), 'Grisbi line preference is not used');
+phase8a_check(str_contains($view, 'savedDisplayMode'), 'saved display-mode baseline is missing');
+phase8a_check(str_contains($view, 'buildAccountDisplayModeOperation'), 'display mode is not included in the save batch');
+phase8a_check(str_contains($domain, "type: 'setAccountDisplayMode'"), 'account display-mode mutation planner is missing');
+phase8a_check(str_contains($domain, "Number(preferences?.linesPerTransaction ?? 1) >= 2"), 'detail mode does not map to two account lines');
+phase8a_check(!str_contains($domain, 'twoLinesShowed') && !str_contains($domain, 'threeLinesShowed'), 'global Grisbi line preferences still influence account display mode');
 phase8a_check(str_contains($view, "markFilter.value === 'unchecked'"), 'unchecked filter is missing');
 phase8a_check(!str_contains($view, 'setTransactionMarks'), 'view constructs raw mark mutations instead of using domain planner');
 phase8a_check(str_contains($panel, 'Save draft & add another'), 'multi-entry workflow is missing');

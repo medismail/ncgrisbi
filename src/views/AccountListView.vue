@@ -27,8 +27,8 @@
         </template>
         <template #default>
           <NcAppNavigationItem
-            :name="accountTotalsLabel(account)"
-            :title="accountTotalsLabel(account)"
+            :name="accountTotalsLabel(account, false)"
+            :title="accountTotalsLabel(account, true)"
           />
         </template>
       </NcAppNavigationItem>
@@ -91,6 +91,7 @@ const route = useRoute()
 const router = useRouter()
 const initializing = ref(true)
 const languageCode = getLanguage()
+const moneyFormatters = new Map()
 
 const accounts = computed(() => store.state.accounts)
 const loading = computed(() => store.state.accountsLoading)
@@ -107,14 +108,24 @@ function currencyCode(account) {
 }
 
 function money(value, account) {
-  return new Intl.NumberFormat(languageCode, {
-    style: 'currency',
-    currency: currencyCode(account),
-  }).format(number(value))
+  const currency = currencyCode(account)
+  let formatter = moneyFormatters.get(currency)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(languageCode, {
+      style: 'currency',
+      currency,
+    })
+    moneyFormatters.set(currency, formatter)
+  }
+  return formatter.format(number(value))
 }
 
-function accountTotalsLabel(account) {
-  return `T: ${money(account.total?.total_amount, account)} · C: ${money(account.total?.total_marked_amount, account)}`
+function accountTotalsLabel(account, full) {
+  if (full) {
+    return `Total: ${money(account.total?.total_amount, account)} · Checked: ${money(account.total?.total_marked_amount, account)}`
+  } else {
+    return `T: ${money(account.total?.total_amount, account)} · C: ${money(account.total?.total_marked_amount, account)}`
+  }
 }
 
 function pendingDiscardPrompt(context) {
