@@ -5,6 +5,8 @@ on:
     paths:
       - 'lib/**'
       - 'src/**'
+      - 'templates/**'
+      - 'webpack.js'
       - 'appinfo/**'
       - 'tests/compatibility/test_reports.py'
       - 'tests/compatibility/test_phase_a_backend.py'
@@ -35,7 +37,15 @@ jobs:
           node-version: '22'
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
+      - name: Test Files action recognition
+        run: node tests/frontend/test_files_action.mjs
+      - name: Test Files integration source contract
+        run: php tests/php/test_files_integration_source_contract.php
       - name: Lint frontend
         run: npm run lint
       - name: Build app
         run: npm run build
+      - name: Build Files action bundle
+        run: |
+          npm run buildviewer
+          test -s dist/js/viewer.js
