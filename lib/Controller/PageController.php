@@ -58,6 +58,12 @@ class PageController extends Controller {
 
     #[NoAdminRequired]
     #[NoCSRFRequired]
+    public function reports($id, $file = null): TemplateResponse {
+        return new TemplateResponse('ncgrisbi', 'main');
+    }
+
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function typepass($file): TemplateResponse | RedirectResponse {
         $response = null;
         if (isset($file)) {
