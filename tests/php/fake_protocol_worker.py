@@ -56,6 +56,23 @@ elif password != b's ecret' or b's ecret' in cmdline:
         },
     }
     output = b''
+elif command == 'reportSnapshot':
+    output = json.dumps({
+        'currency': 'EUR',
+        'period': {'from': '2026-07-21', 'to': '2026-10-21'},
+        'income': {'categories': [], 'uncategorized': None, 'count': 0, 'total': '0'},
+        'expenses': {'categories': [], 'uncategorized': None, 'count': 0, 'total': '0'},
+        'difference': '0',
+        'transactions': [],
+    }, separators=(',', ':')).encode()
+    response = {
+        'version': 1,
+        'ok': True,
+        'requestId': header.get('requestId'),
+        'changed': False,
+        'contentType': 'application/json',
+        'sha256': hashlib.sha256(output).hexdigest(),
+    }
 elif command == 'accountSnapshot':
     output = json.dumps({
         'account': {'id': header.get('accountId'), 'name': 'Test account'},
