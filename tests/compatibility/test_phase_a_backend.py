@@ -189,7 +189,7 @@ def test_checked_totals_include_all_grisbi_checked_states() -> None:
         password=None,
     )
     assert header["ok"] is True
-    account = json.loads(output)[0]
+    account = json.loads(output)["accounts"][0]
     assert account["total"]["total_amount"] == -15.0
     assert account["total"]["total_marked_amount"] == -15.0
 
@@ -270,7 +270,9 @@ def test_framed_worker_serves_all_read_models_from_one_document_pipeline() -> No
         password=None,
     )
     assert header["contentType"] == "application/json"
-    accounts = json.loads(output)
+    response = json.loads(output)
+    assert response["reports"] == []
+    accounts = response["accounts"]
     assert accounts[0]["id"] == "1"
     assert accounts[0]["total"]["total_amount"] == -10.0
     assert accounts[0]["total"]["total_marked_amount"] == -10.0
