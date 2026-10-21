@@ -49,3 +49,4 @@ jobs:
         run: |
           npm run buildviewer
           test -s dist/js/viewer.js
+          test -s dist/js/app.js
