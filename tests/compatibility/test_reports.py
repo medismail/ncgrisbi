@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from datetime import date
 from decimal import Decimal
+
+LIB = Path(__file__).resolve().parents[2] / "lib" / "bin"
+if str(LIB) not in sys.path:
+    sys.path.insert(0, str(LIB))
 
 import pytest
 
