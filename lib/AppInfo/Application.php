@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 namespace OCA\NCGrisbi\AppInfo;
 
+use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\NCGrisbi\Listener\LoadAdditionalListener;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\Files\IMimeTypeDetector;
-use OCP\Util;
 
 class Application extends App implements IBootstrap {
     public const APP_ID = 'ncgrisbi';
@@ -32,11 +33,13 @@ class Application extends App implements IBootstrap {
     }
 
     public function register(IRegistrationContext $context): void {
-    /*    $context->registerPage('PageController');
-        $context->registerService('ApiController');*/
+        $context->registerEventListener(
+            LoadAdditionalScriptsEvent::class,
+            LoadAdditionalListener::class
+        );
     }
 
     public function boot(IBootContext $context): void {
-        Util::addScript(self::APP_ID, "viewer");
+        // The Files app loads viewer.js via LoadAdditionalScriptsEvent.
     }
 }
