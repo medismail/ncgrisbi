@@ -52,17 +52,18 @@
                     <button
                       type="button"
                       class="expand"
-                      :aria-expanded="categoryIsExpanded(section.key, ci, category)"
-                      @click="toggleCategory(section.key, ci, category)"
+                      :aria-expanded="categoryIsExpanded(section.key, ci)"
+                      @click="toggleCategory(section.key, ci)"
                     >
-                      <span aria-hidden="true">{{ categoryIsExpanded(section.key, ci, category) ? '▾' : '▸' }}</span>
+                      <span aria-hidden="true">{{ categoryIsExpanded(section.key, ci) ? '▾' : '▸' }}</span>
                       {{ category.name }}
                     </button>
                   </th>
                   <td class="numeric">{{ category.count }}</td>
                   <td class="numeric">{{ money(category.amount) }}</td>
                 </tr>
-                <template v-for="(leaf, li) in category.subcategories" :key="`${section.key}-${ci}-${li}`">
+                <template v-if="categoryIsExpanded(section.key, ci)">
+                  <template v-for="(leaf, li) in category.subcategories" :key="`${section.key}-${ci}-${li}`">
                   <tr class="subcategory-row">
                     <th scope="row">
                       <button
@@ -85,6 +86,7 @@
                       <td class="numeric">{{ transactionAmount(txIndex) }}</td>
                     </tr>
                   </template>
+                </template>
                 </template>
               </template>
               <template v-if="snapshot[section.key].uncategorized">
@@ -155,6 +157,7 @@ const loading = ref(false)
 const error = ref('')
 const snapshot = ref(null)
 const expanded = reactive({})
+const collapsedCategories = reactive({})
 let requestNumber = 0
 const sections = [
   { key: 'income', title: 'Income' },
@@ -194,16 +197,17 @@ function toggleLeaf(key) {
   expanded[key] = !isExpanded(key)
 }
 
-function categoryIsExpanded(side, ci, category) {
-  return category.subcategories.length > 0
-    && category.subcategories.every((_, li) => isExpanded(leafKey(side, ci, li)))
+function categoryKey(side, ci) {
+  return `${side}-${ci}`
 }
 
-function toggleCategory(side, ci, category) {
-  const next = !categoryIsExpanded(side, ci, category)
-  category.subcategories.forEach((_, li) => {
-    expanded[leafKey(side, ci, li)] = next
-  })
+function categoryIsExpanded(side, ci) {
+  return !collapsedCategories[categoryKey(side, ci)]
+}
+
+function toggleCategory(side, ci) {
+  const key = categoryKey(side, ci)
+  collapsedCategories[key] = !collapsedCategories[key]
 }
 
 const expansionKeys = computed(() => {
@@ -218,11 +222,19 @@ const expansionKeys = computed(() => {
   return keys
 })
 const allExpanded = computed(() =>
-  expansionKeys.value.length > 0 && expansionKeys.value.every(isExpanded)
+  expansionKeys.value.length > 0
+  && expansionKeys.value.every(isExpanded)
+  && sections.every(({ key }) => snapshot.value[key].categories.every(
+    (_, ci) => categoryIsExpanded(key, ci)
+  ))
 )
 function toggleAll() {
   const next = !allExpanded.value
   expansionKeys.value.forEach(key => { expanded[key] = next })
+  if (next) {
+    // Show all transactions also reveals any previously collapsed subcategories.
+    for (const key of Object.keys(collapsedCategories)) delete collapsedCategories[key]
+  }
 }
 
 function transaction(txIndex) {
@@ -244,6 +256,7 @@ async function loadReport() {
   error.value = ''
   loading.value = true
   for (const key of Object.keys(expanded)) delete expanded[key]
+  for (const key of Object.keys(collapsedCategories)) delete collapsedCategories[key]
   try {
     if (!store.state.filePath) throw new Error('Select a Grisbi file before opening reports.')
     const result = await fetchReportSnapshot({
