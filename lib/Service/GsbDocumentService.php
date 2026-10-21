@@ -98,6 +98,54 @@ final class GsbDocumentService {
     }
 
     /**
+     * Read an on-demand report under the same shared lock and ETag guarantees
+     * as the account editor. Viewing reports never writes GSB bytes.
+     *
+     * @return array{document: array{fileId: int, etag: string}, snapshot: array<string, mixed>}
+     */
+    public function getReportSnapshot(
+        string $filePath,
+        string $reportId,
+        ?string $password = null
+    ): array {
+        if (!ctype_digit($reportId) || (int)$reportId <= 0 || (string)(int)$reportId !== $reportId) {
+            throw new \InvalidArgumentException('reportId must be a canonical positive identifier.');
+        }
+        $file = $this->getFile($filePath);
+        $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
+        $locked = false;
+        try {
+            $this->lockingProvider->acquireLock(
+                $lockKey,
+                ILockingProvider::LOCK_SHARED
+            );
+            $locked = true;
+            $etag = (string)$file->getEtag();
+            $content = $file->getContent();
+            $this->grisbiProcess->setPassword($password ?? '');
+            $snapshot = $this->grisbiProcess->getReportSnapshot($reportId, $content);
+            $afterReadEtag = (string)$file->getEtag();
+            if (!hash_equals($etag, $afterReadEtag)) {
+                throw new DocumentConflictException($afterReadEtag);
+            }
+            return [
+                'document' => [
+                    'fileId' => (int)$file->getId(),
+                    'etag' => $etag,
+                ],
+                'snapshot' => $snapshot,
+            ];
+        } finally {
+            if ($locked) {
+                $this->lockingProvider->releaseLock(
+                    $lockKey,
+                    ILockingProvider::LOCK_SHARED
+                );
+            }
+        }
+    }
+
+    /**
      * @param list<array<string, mixed>> $operations
      * @return array{fileId: int, etag: string, changed: bool, outcomes: array<int, mixed>, accountTotals: array<string, mixed>, sha256: string}
      */
