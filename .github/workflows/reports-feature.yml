@@ -1,0 +1,41 @@
+name: Grisbi reports feature
+
+on:
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'src/**'
+      - 'appinfo/**'
+      - 'tests/compatibility/test_reports.py'
+      - 'tests/compatibility/test_phase_a_backend.py'
+      - 'tests/php/**'
+      - '.github/workflows/reports-feature.yml'
+  workflow_dispatch:
+
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest pycryptodomex
+      - name: Compile Python backend
+        run: python -m compileall -q lib/bin/ncgrisbi
+      - name: Run current read-model and report contracts
+        run: python -m pytest -q tests/compatibility/test_phase_a_backend.py tests/compatibility/test_reports.py
+      - name: Lint PHP files
+        run: find lib appinfo tests/php -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Run shared-lock PHP service contract
+        run: php tests/php/test_phase3_document_service.php
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build app
+        run: npm run build
