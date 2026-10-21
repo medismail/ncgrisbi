@@ -81,7 +81,7 @@
                   <template v-if="isExpanded(leafKey(section.key, ci, li))">
                     <tr v-for="txIndex in leaf.transactions" :key="`tx-${section.key}-${ci}-${li}-${txIndex}`" class="transaction-row">
                       <td>{{ transactionDescription(txIndex) }}</td>
-                      <td class="numeric">{{ transactionDate(txIndex) }}</td>
+                      <td class="numeric"></td>
                       <td class="numeric">{{ transactionAmount(txIndex) }}</td>
                     </tr>
                   </template>
@@ -110,7 +110,7 @@
                     class="transaction-row"
                   >
                     <td>{{ transactionDescription(txIndex) }}</td>
-                    <td class="numeric">{{ transactionDate(txIndex) }}</td>
+                    <td class="numeric"></td>
                     <td class="numeric">{{ transactionAmount(txIndex) }}</td>
                   </tr>
                 </template>
@@ -230,10 +230,8 @@ function transaction(txIndex) {
 }
 function transactionDescription(txIndex) {
   const tx = transaction(txIndex)
-  return tx?.payee || `Transaction ${tx?.id || ''}`
-}
-function transactionDate(txIndex) {
-  return transaction(txIndex)?.date || ''
+  if (!tx) return ''
+  return [tx.date, tx.payee || `Transaction ${tx.id}`].filter(Boolean).join(' · ')
 }
 function transactionAmount(txIndex) {
   const tx = transaction(txIndex)
