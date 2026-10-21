@@ -7,6 +7,7 @@ import PasswordEnterView from './views/PasswordEnterView.vue'
 import AccountListView from './views/AccountListView.vue'
 import AccountOverview from './views/AccountOverview.vue'
 import TransactionList from './views/TransactionListView.vue'
+import ReportView from './views/ReportView.vue'
 
 const baseUrl = generateUrl('/apps/ncgrisbi/')
 /*const webRootWithIndexPHP = getRootUrl() + '/index.php'
@@ -38,6 +39,12 @@ const routes = [
         path: '/account/:id',
         name: 'Account',
         component: TransactionList,
+        props: true
+      },
+      {
+        path: '/reports/:id',
+        name: 'Report',
+        component: ReportView,
         props: true
       }
     ]
