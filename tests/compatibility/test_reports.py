@@ -29,11 +29,14 @@ REPORT = (
 def tx(number: int, amount: str, category: int, subcategory: int = 0,
        *, month: int = 10, day: int = 4, account: int = 1,
        transfer: int = 0, split_parent: int = 0, split_child: int = 0) -> str:
+    payment = 2 if account == 2 else 1
     return (
-        f'<Transaction Ac="{account}" Nb="{number}" Dt="{month:02d}/{day:02d}/2026" '
-        f'Dv="(null)" Cu="1" Am="{amount}" Ca="{category}" '
-        f'Sca="{subcategory}" Pa="1" Trt="{transfer}" '
-        f'Br="{split_parent}" Mo="{split_child}" Ar="0" />'
+        f'<Transaction Ac="{account}" Nb="{number}" Id="(null)" '
+        f'Dt="{month:02d}/{day:02d}/2026" Dv="(null)" Cu="1" Am="{amount}" '
+        f'Exb="0" Exr="0.00" Exf="0.00" Pa="1" Ca="{category}" '
+        f'Sca="{subcategory}" Br="{split_parent}" No="(null)" Pn="{payment}" '
+        f'Pc="(null)" Ma="0" Ar="0" Au="0" Re="0" Fi="0" Bu="0" '
+        f'Sbu="0" Vo="(null)" Ba="(null)" Trt="{transfer}" Mo="{split_child}" />'
     )
 
 
@@ -53,7 +56,9 @@ def example_payload() -> bytes:
         tx(12, "-18.00", 1, 0, split_child=10),
         REPORT,
     ])
-    return fixture_bytes().replace(b"</Grisbi>", extra.encode() + b"\n</Grisbi>")
+    base = fixture_bytes().replace(b'01/01/2026', b'10/01/2026')
+    base = base.replace(b'01/02/2026', b'10/02/2026')
+    return base.replace(b"</Grisbi>", extra.encode() + b"\n</Grisbi>")
 
 
 def test_open_file_returns_accounts_and_report_metadata_together() -> None:
@@ -126,9 +131,10 @@ def test_unsupported_filters_fail_instead_of_returning_wrong_totals() -> None:
 
 
 def test_currency_mismatch_is_not_silently_added_to_report_total() -> None:
-    bad = example_payload().replace(b'Nb="4" Dt=', b'Nb="4" Dt=')
     # Transaction currency is not convertible without exact Grisbi exchange semantics.
-    bad = bad.replace(b'Nb="4" Dt="10/04/2026" Dv="(null)" Cu="1"',
-                      b'Nb="4" Dt="10/04/2026" Dv="(null)" Cu="2"')
+    bad = example_payload().replace(
+        b'Nb="4" Id="(null)" Dt="10/04/2026" Dv="(null)" Cu="1"',
+        b'Nb="4" Id="(null)" Dt="10/04/2026" Dv="(null)" Cu="2"'
+    )
     with pytest.raises(MutationError, match="currency conversion"):
         report_snapshot(parse_document(bad), "3", date(2026, 10, 21))
