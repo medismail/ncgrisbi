@@ -38,7 +38,7 @@ def test_existing_expense_creates_party_category_subcategory_and_preserves_id():
     assert (transactions[0].get("Nb"), transactions[0].get("Pa"), transactions[0].get("Ca"), transactions[0].get("Sca")) == ("1", "2", "2", "1")
     assert transactions[1].get("Pa") == "1"
     assert result.account_totals == {"1": {"total_amount": -10.0, "total_marked_amount": -10.0}}
-    assert {x["type"] for x in result.outcomes} == {
+    assert {x["operation"] for x in result.outcomes} == {
         "CreateParty", "CreateCategory", "CreateSubcategory", "UpdateTransaction"
     }
 
