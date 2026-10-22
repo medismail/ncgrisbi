@@ -616,13 +616,19 @@ class Phase6Session:
         if not isinstance(changes, Mapping) or not changes:
             raise MutationError("updateTransaction changes must be a non-empty JSON object")
         allowed = {
-            "accountId", "date", "valueDate", "currencyId", "amount", "partyId", "categoryId",
-            "subcategoryId", "note", "paymentMethodId", "paymentReference", "marked", "financialYear",
+            "accountId", "date", "valueDate", "currencyId", "amount",
+            "partyId", "partyName", "categoryId", "categoryName",
+            "subcategoryId", "subcategoryName", "categoryKind", "createMissing",
+            "note", "paymentMethodId", "paymentReference", "marked", "financialYear",
             "budgetId", "subbudgetId", "voucher", "bankReference",
         }
         unknown = sorted(set(changes) - allowed)
         if unknown:
             raise MutationError("updateTransaction contains unsupported changes: %s" % ", ".join(unknown))
+        if "createMissing" in changes:
+            _bool(changes, "createMissing")
+            if not any(name in changes for name in ("partyName", "categoryName", "subcategoryName")):
+                raise MutationError("createMissing requires a name-based reference")
         candidate = dict(existing)
         if "accountId" in changes:
             candidate["Ac"] = _canonical_id(changes["accountId"], "accountId")
@@ -634,12 +640,28 @@ class Phase6Session:
         if "date" in changes: candidate["Dt"] = _date(changes["date"])
         if "valueDate" in changes: candidate["Dv"] = _date(changes["valueDate"], "valueDate", True)
         if "amount" in changes: candidate["Am"] = str(changes["amount"])
-        if "partyId" in changes: candidate["Pa"] = _canonical_id(changes["partyId"], "partyId", True)
-        if "categoryId" in changes:
-            candidate["Ca"] = _canonical_id(changes["categoryId"], "categoryId", True)
-            if "subcategoryId" not in changes: candidate["Sca"] = "0"
-        if "subcategoryId" in changes: candidate["Sca"] = _canonical_id(changes["subcategoryId"], "subcategoryId", True)
-        if candidate["Ca"] == "0": candidate["Sca"] = "0"
+        if "partyId" in changes or "partyName" in changes:
+            candidate["Pa"] = self._resolve_party(changes, client_index, allow_create=True)
+
+        # The saved transaction keeps its existing references unless an edit
+        # supplies replacements. Resolve new names inside this same mutation
+        # so a failed update cannot leave orphaned parties or categories.
+        category_fields = ("categoryId", "categoryName", "subcategoryId", "subcategoryName", "categoryKind")
+        if any(field in changes for field in category_fields):
+            references = {field: changes[field] for field in category_fields if field in changes}
+            if "categoryId" not in references and "categoryName" not in references:
+                references["categoryId"] = candidate["Ca"]
+            if "subcategoryId" not in references and "subcategoryName" not in references:
+                references["subcategoryId"] = (
+                    "0" if "categoryId" in changes or "categoryName" in changes else candidate["Sca"]
+                )
+            if "createMissing" in changes:
+                references["createMissing"] = changes["createMissing"]
+            category_id, subcategory_id = self._resolve_category(
+                references, _decimal(candidate["Am"]), client_index, allow_create=True
+            )
+            candidate["Ca"] = category_id
+            candidate["Sca"] = subcategory_id
         for field, attribute in (("note", "No"), ("paymentReference", "Pc"), ("voucher", "Vo"), ("bankReference", "Ba")):
             if field in changes: candidate[attribute] = _nullable(changes[field])
         if "paymentMethodId" in changes: candidate["Pn"] = _canonical_id(changes["paymentMethodId"], "paymentMethodId", True)
@@ -651,7 +673,9 @@ class Phase6Session:
         for field, attribute in (("financialYear", "Fi"), ("budgetId", "Bu"), ("subbudgetId", "Sbu")):
             if field in changes: candidate[attribute] = str(changes[field])
         strict_payment = bool({"accountId", "currencyId", "amount", "paymentMethodId"} & set(changes))
-        enforce_kind = bool({"amount", "categoryId", "subcategoryId"} & set(changes))
+        enforce_kind = bool({
+            "amount", "categoryId", "categoryName", "subcategoryId", "subcategoryName", "categoryKind"
+        } & set(changes))
         self._validate_normal(candidate, strict_payment, enforce_kind)
         self.transactions[transaction_id] = candidate
         self._outcome(client_index, "UpdateTransaction", "Transaction", transaction_id)
@@ -733,11 +757,16 @@ class Phase6Session:
         if not isinstance(changes, Mapping) or not changes:
             raise MutationError("updateTransfer changes must be a non-empty JSON object")
         allowed = {
-            "date", "valueDate", "amount", "partyId", "note", "paymentMethodId", "paymentReference",
-            "marked", "voucher", "bankReference", "targetAccountId", "targetPaymentMethodId", "targetPaymentReference",
+            "date", "valueDate", "amount", "partyId", "partyName", "createMissing",
+            "note", "paymentMethodId", "paymentReference", "marked", "voucher",
+            "bankReference", "targetAccountId", "targetPaymentMethodId", "targetPaymentReference",
         }
         unknown = sorted(set(changes) - allowed)
         if unknown: raise MutationError("updateTransfer contains unsupported changes: %s" % ", ".join(unknown))
+        if "createMissing" in changes:
+            _bool(changes, "createMissing")
+            if "partyName" not in changes:
+                raise MutationError("createMissing requires partyName for updateTransfer")
         source_attrs = dict(source)
         counterpart_attrs = dict(counterpart)
         target_account_id = _canonical_id(changes.get("targetAccountId", counterpart_attrs["Ac"]), "targetAccountId")
@@ -751,10 +780,8 @@ class Phase6Session:
         if "amount" in changes: source_attrs["Am"] = _amount_text(changes["amount"], source_currency)
         amount = Decimal(source_attrs["Am"])
         if amount == 0: raise MutationError("Transfer amount cannot be zero")
-        if "partyId" in changes:
-            party_id = _canonical_id(changes["partyId"], "partyId", True)
-            if party_id != "0" and party_id not in self.parties: raise MutationError("Unknown party %s" % party_id)
-            source_attrs["Pa"] = party_id
+        if "partyId" in changes or "partyName" in changes:
+            source_attrs["Pa"] = self._resolve_party(changes, client_index, allow_create=True)
         for field, attribute in (("note", "No"), ("paymentReference", "Pc"), ("voucher", "Vo"), ("bankReference", "Ba")):
             if field in changes: source_attrs[attribute] = _nullable(changes[field])
         if "marked" in changes:

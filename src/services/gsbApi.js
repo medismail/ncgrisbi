@@ -22,8 +22,20 @@ export async function fetchAccounts({ filePath, filePassword = '' }) {
     filePath,
     filePassword,
   })
-  if (!Array.isArray(response.data)) {
-    throw invalidPayload('The Grisbi account response is invalid.', response.data)
+  if (!Array.isArray(response.data?.accounts) || !Array.isArray(response.data?.reports)) {
+    throw invalidPayload('The Grisbi file response is invalid.', response.data)
+  }
+  return response.data
+}
+
+export async function fetchReportSnapshot({ reportId, filePath, filePassword = '' }) {
+  const url = generateUrl('/apps/ncgrisbi/api/reports/{reportId}', {
+    reportId: String(reportId),
+  })
+  const response = await axios.post(url, { filePath, filePassword })
+  if (!response.data?.success || !response.data?.snapshot
+      || !Array.isArray(response.data.snapshot.transactions)) {
+    throw invalidPayload('The Grisbi report response is invalid.', response.data)
   }
   return response.data
 }

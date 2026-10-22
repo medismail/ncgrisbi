@@ -7,6 +7,7 @@ return [
         ['name' => 'page#index', 'url' => '/', 'verb' => 'GET'],
         ['name' => 'page#accounts', 'url' => '/accounts', 'verb' => 'GET'],
         ['name' => 'page#account', 'url' => '/account/{id}', 'verb' => 'GET'],
+        ['name' => 'page#reports', 'url' => '/reports/{id}', 'verb' => 'GET'],
         ['name' => 'page#typepass', 'url' => '/typepass', 'verb' => 'GET'],
         ['name' => 'page#file', 'url' => '/file', 'verb' => 'GET'],
 
@@ -16,6 +17,9 @@ return [
         ['name' => 'api#get_parties', 'url' => '/api/parties', 'verb' => 'POST'],
         ['name' => 'api#get_categories', 'url' => '/api/categories', 'verb' => 'POST'],
         ['name' => 'api#check_encrypted', 'url' => '/api/checkencrypted', 'verb' => 'GET'],
+
+        // On-demand read-only report calculation.
+        ['name' => 'report#snapshot', 'url' => '/api/reports/{reportId}', 'verb' => 'POST'],
 
         // Typed editor snapshot and concurrency-safe mutation API
         ['name' => 'editor#account', 'url' => '/api/editor/account/{accountId}', 'verb' => 'POST'],
