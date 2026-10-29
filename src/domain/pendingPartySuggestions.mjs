@@ -1,10 +1,29 @@
 import { TRANSFER_CATEGORY, normalizeName } from './transactionEditor.mjs'
 
+const HISTORY_FIELDS = [
+  'amount', 'partyName', 'categoryName', 'subcategoryName',
+  'paymentMethodName', 'transferPaymentMethodName', 'note',
+  'paymentReference', 'voucher', 'bankReference',
+]
+const HISTORY_SELECTION_FIELDS = [
+  'partySelectionId', 'categorySelectionId', 'subcategorySelectionId',
+  'paymentMethodSelectionId', 'transferAccountSelectionId',
+  'transferPaymentMethodSelectionId',
+]
+
+function changesCompletion(row) {
+  if (row.isNew) return true
+  return HISTORY_FIELDS.some(field =>
+    String(row[field] ?? '') !== String(row.original?.[field] ?? ''))
+    || HISTORY_SELECTION_FIELDS.some(field =>
+      String(row[field] ?? '') !== String(row.originalSelections?.[field] ?? ''))
+}
+
 function pendingRows(rows) {
   return rows
     .map((row, index) => ({ row, index }))
     .filter(({ row }) => row.locallyApplied && !row.deleted
-      && (row.isNew || Number(row.localCompletionOrder) > 0))
+      && (row.isNew || (Number(row.localCompletionOrder) > 0 && changesCompletion(row))))
     .sort((left, right) =>
       (Number(left.row.localCompletionOrder) || left.index + 1)
       - (Number(right.row.localCompletionOrder) || right.index + 1))
