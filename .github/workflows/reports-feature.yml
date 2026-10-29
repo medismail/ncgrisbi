@@ -15,6 +15,7 @@ on:
       - 'tests/frontend/test_accent_search.mjs'
       - 'tests/frontend/test_phase8a_search.mjs'
       - 'tests/frontend/test_pending_party_suggestions.mjs'
+      - 'tests/frontend/test_pending_party_history.mjs'
       - 'tests/php/**'
       - '.github/workflows/reports-feature.yml'
   workflow_dispatch:
@@ -48,8 +49,12 @@ jobs:
         run: |
           node tests/frontend/test_accent_search.mjs
           node tests/frontend/test_phase8a_search.mjs
-      - name: Test pending party suggestions between drafts
-        run: node tests/frontend/test_pending_party_suggestions.mjs
+      - name: Test pending party suggestions and completion history
+        run: |
+          node tests/frontend/test_pending_party_suggestions.mjs
+          node tests/frontend/test_pending_party_history.mjs
+          node tests/frontend/test_phase8a_completion.mjs
+          node tests/frontend/test_phase8a_ui.mjs
       - name: Test Files action recognition
         run: node tests/frontend/test_files_action.mjs
       - name: Test Files integration source contract
