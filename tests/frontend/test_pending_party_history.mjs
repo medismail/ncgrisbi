@@ -169,4 +169,55 @@ unapplied.amount = '-999.00'
 assert.equal(snapshotWithPendingPartyHistory(snapshot, [unapplied])
   .pendingCompletionByPartyName['not yet applied'], undefined)
 
+// Transfer completion also uses locally applied destination and counterpart details.
+const transfer = newResponsiveDraft(snapshot, 'new-transfer', '07/14/2026')
+applied(transfer, {
+  partyName: 'Café', partySelectionId: '1',
+  categoryName: 'Transfer', categorySelectionId: null,
+  subcategoryName: 'Savings', transferAccountSelectionId: '2',
+  amount: '-70.00',
+  paymentMethodName: 'Debit', paymentMethodSelectionId: '1',
+  transferPaymentMethodName: 'Incoming', transferPaymentMethodSelectionId: '4',
+  note: 'Latest transfer',
+}, 6)
+const transferHistory = snapshotWithPendingPartyHistory(snapshot, [transfer])
+const { draft: nextTransfer } = complete(transferHistory, snapshot.parties[0])
+assert.equal(nextTransfer.amount, '-70.00')
+assert.equal(nextTransfer.categoryName, 'Transfer')
+assert.equal(nextTransfer.subcategoryName, 'Savings')
+assert.equal(nextTransfer.transferAccountSelectionId, '2')
+assert.equal(nextTransfer.transferPaymentMethodName, 'Incoming')
+assert.equal(nextTransfer.transferPaymentMethodSelectionId, '4')
+assert.equal(nextTransfer.note, 'Latest transfer')
+
+// With duplicate real payee IDs, the autocomplete should select the ID
+// belonging to the latest locally applied transaction, not the older one.
+const duplicateSnapshot = {
+  ...snapshot,
+  parties: [
+    ...snapshot.parties,
+    { id: '3', name: 'Shop', preferredCompletionPartyId: '2', completionPriority: 2 },
+  ],
+  completionByPartyId: {
+    ...snapshot.completionByPartyId,
+    '3': { ...snapshot.completionByPartyId['2'], amount: '-999.00' },
+  },
+}
+const duplicateRow = newResponsiveDraft(duplicateSnapshot, 'new-duplicate', '07/14/2026')
+applied(duplicateRow, {
+  partyName: 'Shop', partySelectionId: '3',
+  amount: '-23.00',
+  categoryName: 'Bills', categorySelectionId: '2',
+  subcategoryName: 'Electricity', subcategorySelectionId: '1',
+  paymentMethodName: 'Debit', paymentMethodSelectionId: '1',
+}, 7)
+const duplicateChoices = partyChoicesWithPending(duplicateSnapshot.parties, [duplicateRow])
+assert.equal(duplicateChoices.find(item => item.id === '2').preferredCompletionPartyId, '3')
+assert.equal(duplicateChoices.find(item => item.id === '3').completionPriority, -1)
+const duplicateHistory = snapshotWithPendingPartyHistory(duplicateSnapshot, [duplicateRow])
+assert.equal(
+  complete(duplicateHistory, duplicateChoices.find(item => item.id === '3')).draft.amount,
+  '-23.00',
+)
+
 console.log('Unsaved party completion history tests passed')
