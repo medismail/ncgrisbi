@@ -10,40 +10,37 @@ function pendingRows(rows) {
       - (Number(right.row.localCompletionOrder) || right.index + 1))
 }
 
+function selectedByName(records, id, name) {
+  const normalized = normalizeName(name)
+  if (!normalized) return null
+  const selected = id == null ? null : records.find(item =>
+    String(item.id) === String(id) && normalizeName(item.name) === normalized)
+  if (selected) return selected
+  const matches = records.filter(item => normalizeName(item.name) === normalized)
+  return matches.length === 1 ? matches[0] : null
+}
+
 function partyIdForRow(snapshot, row) {
-  const name = normalizeName(row.partyName)
-  if (!name) return null
-  const selected = snapshot.parties.find(party =>
-    String(party.id) === String(row.partySelectionId) && normalizeName(party.name) === name)
-  if (selected) return String(selected.id)
-  const matches = snapshot.parties.filter(party => normalizeName(party.name) === name)
-  return matches.length === 1 ? String(matches[0].id) : null
+  const party = selectedByName(snapshot.parties, row.partySelectionId, row.partyName)
+  return party ? String(party.id) : null
 }
 
 function selectedId(records, id, name) {
-  const normalized = normalizeName(name)
-  const record = records.find(item =>
-    String(item.id) === String(id) && normalizeName(item.name) === normalized)
-  if (record) return String(record.id)
-  const matches = records.filter(item => normalizeName(item.name) === normalized)
-  return matches.length === 1 ? String(matches[0].id) : '0'
+  const selected = selectedByName(records, id, name)
+  return selected ? String(selected.id) : '0'
 }
 
 function draftCompletion(snapshot, row) {
   const transfer = normalizeName(row.categoryName) === normalizeName(TRANSFER_CATEGORY)
-  const category = transfer ? null : snapshot.categories.find(item =>
-    String(item.id) === String(row.categorySelectionId)
-    && normalizeName(item.name) === normalizeName(row.categoryName))
-    ?? (transfer ? null : snapshot.categories.filter(item =>
-      normalizeName(item.name) === normalizeName(row.categoryName)).length === 1
-      ? snapshot.categories.find(item => normalizeName(item.name) === normalizeName(row.categoryName))
-      : null)
+  const category = transfer ? null : selectedByName(
+    snapshot.categories, row.categorySelectionId, row.categoryName,
+  )
   const paymentMethods = snapshot.paymentMethodsByAccount?.[String(snapshot.account.id)] ?? []
-  const target = transfer ? snapshot.accounts.find(item =>
-    String(item.id) === String(row.transferAccountSelectionId)
-    && normalizeName(item.name) === normalizeName(row.subcategoryName))
-    ?? snapshot.accounts.find(item => normalizeName(item.name) === normalizeName(row.subcategoryName))
-    : null
+  const target = transfer ? selectedByName(
+    snapshot.accounts.filter(account =>
+      !account.closed && String(account.id) !== String(snapshot.account.id)),
+    row.transferAccountSelectionId, row.subcategoryName,
+  ) : null
   const targetMethods = snapshot.paymentMethodsByAccount?.[String(target?.id)] ?? []
   return {
     sourceAccountId: String(snapshot.account.id),
@@ -108,5 +105,21 @@ export function partyChoicesWithPending(savedParties, rows) {
       completionPriority: -1,
     })
   }
-  return [...pending, ...savedParties]
+  // Duplicate payees can have different real Grisbi IDs. Prefer the payee
+  // used in the latest locally applied draft instead of stale saved history.
+  const preferredIds = new Map()
+  for (const { row } of applied) {
+    const partyId = partyIdForRow({ parties: savedParties }, row)
+    if (partyId) preferredIds.set(normalizeName(row.partyName), partyId)
+  }
+  const savedChoices = savedParties.map(party => {
+    const preferred = preferredIds.get(normalizeName(party.name))
+    if (!preferred) return party
+    return {
+      ...party,
+      preferredCompletionPartyId: preferred,
+      completionPriority: String(party.id) === preferred ? -1 : party.completionPriority,
+    }
+  })
+  return [...pending, ...savedChoices]
 }
