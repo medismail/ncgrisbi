@@ -337,7 +337,7 @@ export function syncSelectionIds(row, snapshot) {
 export function applyPartyCompletionTrace(row, snapshot) {
   const before = Object.fromEntries(COMPLETION_FIELDS.map(field => [field, row[field]]))
   const hint = row.partySelectionId == null
-    ? null
+    ? snapshot.pendingCompletionByPartyName?.[normalizeName(row.partyName)]
     : snapshot.completionByPartyId?.[String(row.partySelectionId)]
 
   // A new draft starts with the account default payment name but no explicit
@@ -356,6 +356,10 @@ export function applyPartyCompletionTrace(row, snapshot) {
     if (sourceMethod) {
       row.paymentMethodName = sourceMethod.name
       row.paymentMethodSelectionId = String(sourceMethod.id)
+    } else if (hint.paymentMethodName) {
+      // A locally applied draft can refer to a name without a saved ID.
+      row.paymentMethodName = hint.paymentMethodName
+      row.paymentMethodSelectionId = null
     } else if (!row.paymentMethodName) {
       onAmountDirectionChanged(row, snapshotForRow(snapshot, row))
     }
@@ -372,6 +376,9 @@ export function applyPartyCompletionTrace(row, snapshot) {
       if (targetMethod) {
         row.transferPaymentMethodName = targetMethod.name
         row.transferPaymentMethodSelectionId = String(targetMethod.id)
+      } else if (hint.transferPaymentMethodName) {
+        row.transferPaymentMethodName = hint.transferPaymentMethodName
+        row.transferPaymentMethodSelectionId = null
       }
     } else {
       row.categorySelectionId = nonZeroId(hint.categoryId)
