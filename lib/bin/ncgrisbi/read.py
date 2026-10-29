@@ -38,6 +38,7 @@ class _ReadContext:
         "subcategory_rows",
         "transactions",
         "transaction_rows",
+        "report_rows",
     )
 
     def __init__(self, document: GsbDocument):
@@ -54,6 +55,7 @@ class _ReadContext:
         self.subcategory_rows: List[Any] = []
         self.transactions: Dict[str, Any] = {}
         self.transaction_rows: List[Any] = []
+        self.report_rows: List[Any] = []
 
         for element in document.root:
             tag = element.tag
@@ -87,6 +89,9 @@ class _ReadContext:
                 if parent and key:
                     self.subcategories[(parent, key)] = element
                     self.subcategory_rows.append(element)
+            elif tag == "Report":
+                if element.get("Nb"):
+                    self.report_rows.append(element)
             elif tag == "Transaction":
                 key = element.get("Nb")
                 if key:
@@ -125,8 +130,8 @@ def document_info(document: GsbDocument) -> Dict[str, Any]:
     }
 
 
-def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
-    context = _ReadContext(document)
+def list_accounts(document: GsbDocument, context: Optional[_ReadContext] = None) -> List[Dict[str, Any]]:
+    context = context if context is not None else _ReadContext(document)
     totals: Dict[str, Dict[str, Decimal]] = {
         account_id: dict(_ZERO_TOTAL) for account_id in context.accounts
     }
@@ -167,6 +172,18 @@ def list_accounts(document: GsbDocument) -> List[Dict[str, Any]]:
             }
         )
     return result
+
+
+def list_accounts_with_reports(document: GsbDocument) -> Dict[str, Any]:
+    """Collect account totals and saved report names from the same XML index."""
+    context = _ReadContext(document)
+    return {
+        "accounts": list_accounts(document, context),
+        "reports": [
+            {"id": report.get("Nb"), "name": report.get("Name") or ""}
+            for report in context.report_rows
+        ],
+    }
 
 
 def list_categories(document: GsbDocument) -> List[Dict[str, Any]]:
@@ -364,6 +381,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
 __all__ = [
     "document_info",
     "list_accounts",
+    "list_accounts_with_reports",
     "list_categories",
     "list_parties",
     "list_transactions",

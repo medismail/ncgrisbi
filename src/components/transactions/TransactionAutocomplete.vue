@@ -52,6 +52,8 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { normalizeName } from '@/domain/transactionEditor.mjs'
+import { normalizeSearchText } from '@/domain/searchNormalization.mjs'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -76,17 +78,13 @@ const activeIndex = ref(0)
 const listId = `transaction-autocomplete-${Math.random().toString(36).slice(2)}`
 const errorId = `${listId}-error`
 
-function normalize(value) {
-  return String(value ?? '').normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase()
-}
-
 const sortedItems = computed(() => {
-  const query = normalize(props.modelValue)
+  const query = normalizeSearchText(props.modelValue)
   const recentRank = new Map(props.recentIds.map((id, index) => [String(id), index]))
   return props.items
     .map((item, sourceIndex) => {
       const name = String(item.name ?? '')
-      const normalized = normalize(name)
+      const normalized = normalizeSearchText(name)
       const prefix = query && normalized.startsWith(query)
       const contains = query && normalized.includes(query)
       return {
@@ -110,14 +108,17 @@ const sortedItems = computed(() => {
 
 const visibleOptions = computed(() => {
   const options = sortedItems.value.slice(0, props.maxResults).map(candidate => ({
-    key: `item-${candidate.item.id}`,
+    key: candidate.item.id == null
+      ? `pending-${normalizeName(candidate.name)}`
+      : `item-${candidate.item.id}`,
     label: candidate.name,
     secondary: candidate.item.secondary ?? '',
     item: candidate.item,
     create: false,
   }))
   const query = String(props.modelValue ?? '').trim()
-  const exact = props.items.some(item => normalize(item.name) === normalize(query))
+  // Search is accent-insensitive; choosing/creating an exact name is not.
+  const exact = props.items.some(item => normalizeName(item.name) === normalizeName(query))
   if (props.allowCreate && query && !exact) {
     options.push({
       key: `create-${query}`,
@@ -155,7 +156,8 @@ function optionId(index) {
 function openList() {
   if (props.disabled) return
   open.value = true
-  const selectedIndex = visibleOptions.value.findIndex(option => String(option.item?.id) === String(props.selectedId))
+  const selectedIndex = props.selectedId == null ? -1 : visibleOptions.value.findIndex(option =>
+    option.item?.id != null && String(option.item.id) === String(props.selectedId))
   activeIndex.value = selectedIndex >= 0 ? selectedIndex : 0
 }
 
@@ -195,7 +197,7 @@ function choose(option) {
 
 function chooseExactOrActive() {
   const exact = visibleOptions.value.find(option => !option.create
-    && normalize(option.item.name) === normalize(props.modelValue))
+    && normalizeName(option.item.name) === normalizeName(props.modelValue))
   choose(exact ?? visibleOptions.value[activeIndex.value])
 }
 

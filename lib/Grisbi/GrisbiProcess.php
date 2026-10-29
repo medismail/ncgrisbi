@@ -71,6 +71,14 @@ final class GrisbiProcess {
     }
 
     /** @return array<string, mixed> */
+    public function getReportSnapshot(string $reportId, string $fileContent): array {
+        return $this->requestJson([
+            'command' => 'reportSnapshot',
+            'reportId' => $reportId,
+        ], $fileContent);
+    }
+
+    /** @return array<string, mixed> */
     public function getDocumentInfo(string $fileContent): array {
         return $this->requestJson([
             'command' => 'documentInfo',

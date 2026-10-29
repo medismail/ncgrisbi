@@ -1,4 +1,4 @@
-import { normalizeName } from './transactionEditor.mjs'
+import { normalizeSearchText } from './searchNormalization.mjs'
 
 const SEARCH_FIELDS = [
   'partyName',
@@ -9,7 +9,7 @@ const SEARCH_FIELDS = [
 ]
 
 export function matchesTransactionSearch(transaction, query) {
-  const pattern = normalizeName(query)
+  const pattern = normalizeSearchText(query)
   if (!pattern) return true
-  return SEARCH_FIELDS.some(field => normalizeName(transaction?.[field]).includes(pattern))
+  return SEARCH_FIELDS.some(field => normalizeSearchText(transaction?.[field]).includes(pattern))
 }

@@ -124,6 +124,17 @@ namespace {
     check_service($locks->lastAcquireType === ILockingProvider::LOCK_SHARED, 'snapshot did not use shared lock');
     check_service($locks->locked === false, 'snapshot did not release shared lock');
 
+    $report = $service->getReportSnapshot(
+        'Documents/test.gsb',
+        '3',
+        's ecret'
+    );
+    check_service($report['snapshot']['currency'] === 'EUR', 'report currency is incorrect');
+    check_service($report['document']['etag'] === 'etag-1', 'report etag is incorrect');
+    check_service($file->writes === 0, 'report read wrote the GSB file');
+    check_service($locks->lastAcquireType === ILockingProvider::LOCK_SHARED, 'report did not use shared lock');
+    check_service($locks->locked === false, 'report did not release its shared lock');
+
     $result = $service->mutate(
         'Documents/test.gsb',
         'etag-1',

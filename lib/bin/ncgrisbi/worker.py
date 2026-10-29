@@ -20,12 +20,13 @@ from .mutation import apply_mutations
 from .parser import parse_document
 from .read import (
     document_info,
-    list_accounts,
+    list_accounts_with_reports,
     list_categories,
     list_parties,
     list_transactions,
 )
 from .snapshot import build_account_snapshot
+from .report_engine import report_snapshot
 from .validator import assert_valid_document
 
 
@@ -50,6 +51,19 @@ def _account_id(header: Mapping[str, Any]) -> str:
         raise ProtocolError("accountId must be a canonical positive identifier")
     if number <= 0 or str(number) != value:
         raise ProtocolError("accountId must be a canonical positive identifier")
+    return value
+
+
+def _report_id(header: Mapping[str, Any]) -> str:
+    value = header.get("reportId")
+    if not isinstance(value, str):
+        raise ProtocolError("reportId must be a canonical positive identifier")
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise ProtocolError("reportId must be a canonical positive identifier") from exc
+    if number <= 0 or str(number) != value:
+        raise ProtocolError("reportId must be a canonical positive identifier")
     return value
 
 
@@ -107,12 +121,16 @@ def _read_command(
 
     handlers = {
         "documentInfo": lambda document: document_info(document),
-        "listAccounts": lambda document: list_accounts(document),
+        "listAccounts": lambda document: list_accounts_with_reports(document),
         "listParties": lambda document: list_parties(document),
         "listCategories": lambda document: list_categories(document),
         "listTransactions": lambda document: list_transactions(
             document,
             _account_id(header),
+        ),
+        "reportSnapshot": lambda document: report_snapshot(
+            document,
+            _report_id(header),
         ),
         "accountSnapshot": lambda document: build_account_snapshot(
             document,

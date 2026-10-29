@@ -349,20 +349,32 @@ function createOperation(row, snapshot) {
 
 function normalUpdateOperation(row, snapshot) {
   const changes = scalarChanges(row)
-  const partyName = optionalText(row.partyName)
-  const party = partyName === null ? null : partyForName(snapshot, partyName, row.key)
-  if (partyName !== null && !party) {
-    throw new EditorValidationError(`Party “${partyName}” does not exist.`, row.key)
+  const party = {}
+  partyReference(party, snapshot, row, true)
+  if (party.partyName != null) {
+    changes.partyName = party.partyName
+    changes.createMissing = true
+  } else if (party.partyId !== String(row.original.partyId)) {
+    changes.partyId = party.partyId
   }
-  const partyId = party ? String(party.id) : '0'
-  if (partyId !== row.original.partyId) changes.partyId = partyId
 
   const references = {}
-  normalCategoryReference(references, snapshot, row, false)
-  const categoryId = String(references.categoryId ?? row.original.categoryId)
-  const subcategoryId = String(references.subcategoryId ?? '0')
-  if (categoryId !== row.original.categoryId) changes.categoryId = categoryId
-  if (subcategoryId !== row.original.subcategoryId) changes.subcategoryId = subcategoryId
+  normalCategoryReference(references, snapshot, row, true)
+  if (references.categoryName != null) {
+    changes.categoryName = references.categoryName
+    if (references.subcategoryName != null) changes.subcategoryName = references.subcategoryName
+    changes.createMissing = true
+  } else {
+    const categoryId = String(references.categoryId)
+    if (categoryId !== String(row.original.categoryId)) changes.categoryId = categoryId
+    if (references.subcategoryName != null) {
+      changes.subcategoryName = references.subcategoryName
+      changes.createMissing = true
+    } else {
+      const subcategoryId = String(references.subcategoryId ?? '0')
+      if (subcategoryId !== String(row.original.subcategoryId)) changes.subcategoryId = subcategoryId
+    }
+  }
 
   const paymentMethodId = paymentId(
     snapshot,
@@ -384,13 +396,14 @@ function normalUpdateOperation(row, snapshot) {
 
 function transferUpdateOperation(row, snapshot) {
   const changes = scalarChanges(row)
-  const partyName = optionalText(row.partyName)
-  const party = partyName === null ? null : partyForName(snapshot, partyName, row.key)
-  if (partyName !== null && !party) {
-    throw new EditorValidationError(`Party “${partyName}” does not exist.`, row.key)
+  const party = {}
+  partyReference(party, snapshot, row, true)
+  if (party.partyName != null) {
+    changes.partyName = party.partyName
+    changes.createMissing = true
+  } else if (party.partyId !== String(row.original.partyId)) {
+    changes.partyId = party.partyId
   }
-  const partyId = party ? String(party.id) : '0'
-  if (partyId !== row.original.partyId) changes.partyId = partyId
 
   const sourcePayment = paymentId(
     snapshot,
@@ -549,8 +562,9 @@ export function allowReconciledMutations(operations) {
 
 export function applyPartyCompletion(row, snapshot) {
   const party = partyForName(snapshot, row.partyName, row.key)
-  if (!party) return false
-  const hint = snapshot.completionByPartyId?.[String(party.id)]
+  const hint = party
+    ? snapshot.completionByPartyId?.[String(party.id)]
+    : snapshot.pendingCompletionByPartyName?.[normalizeName(row.partyName)]
   if (!hint) return false
 
   let changed = false
@@ -569,18 +583,20 @@ export function applyPartyCompletion(row, snapshot) {
       }
     } else {
       const category = snapshot.categories.find(item => String(item.id) === String(hint.categoryId))
-      if (category) {
-        row.categoryName = category.name
-        const subcategory = category.subcategories.find(item => String(item.id) === String(hint.subcategoryId))
-        if (subcategory && empty('subcategoryName')) row.subcategoryName = subcategory.name
+      const name = hint.categoryName || category?.name
+      if (name) {
+        row.categoryName = name
+        const subcategory = category?.subcategories.find(item => String(item.id) === String(hint.subcategoryId))
+        if (empty('subcategoryName')) row.subcategoryName = hint.subcategoryName || subcategory?.name || ''
         changed = true
       }
     }
   }
-  if (empty('paymentMethodName') && hint.paymentMethodId !== '0') {
+  if (empty('paymentMethodName')) {
     const method = snapshot.paymentMethods.find(item => String(item.id) === String(hint.paymentMethodId))
-    if (method) {
-      row.paymentMethodName = method.name
+    const name = hint.paymentMethodName || method?.name
+    if (name) {
+      row.paymentMethodName = name
       changed = true
     }
   }

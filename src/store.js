@@ -15,6 +15,7 @@ const emptyPendingState = () => ({
 const store = createStore({
   state: {
     accounts: [],
+    reports: [],
     accountsLoading: false,
     accountsError: null,
     filePath: '',
@@ -28,6 +29,9 @@ const store = createStore({
     },
     updateAccountTotals(state, totalsByAccount) {
       state.accounts = mergeAccountTotals(state.accounts, totalsByAccount)
+    },
+    setReports(state, reports) {
+      state.reports = Array.isArray(reports) ? reports : []
     },
     setAccountsLoading(state, loading) {
       state.accountsLoading = Boolean(loading)
@@ -52,6 +56,7 @@ const store = createStore({
       }
     },
     clearFileSession(state) {
+      state.reports = []
       state.accounts = []
       state.accountsLoading = false
       state.accountsError = null
@@ -73,14 +78,16 @@ const store = createStore({
       commit('setAccountsError', null)
       try {
         const password = options.filePassword ?? state.filePassword
-        const accounts = await fetchAccountsRequest({
+        const fileData = await fetchAccountsRequest({
           filePath: state.filePath,
           filePassword: password,
         })
-        commit('setAccounts', accounts)
+        commit('setAccounts', fileData.accounts)
+        commit('setReports', fileData.reports)
         if (options.commitPassword) commit('setFilePassword', password)
-        return accounts
+        return fileData.accounts
       } catch (error) {
+        commit('setReports', [])
         commit('setAccounts', [])
         commit('setAccountsError', apiError(error))
         throw error

@@ -32,6 +32,29 @@
           />
         </template>
       </NcAppNavigationItem>
+      <NcAppNavigationItem
+        v-if="reports.length"
+        name="Reports"
+        :allow-collapse="true"
+        :open="true"
+      >
+        <template #icon>
+          <FileChart :size="20" />
+        </template>
+        <template #default>
+          <NcAppNavigationItem
+            v-for="report in reports"
+            :key="report.id"
+            :name="report.name"
+            :title="report.name"
+            :to="`/reports/${report.id}`"
+          >
+            <template #icon>
+              <FileDocumentOutline :size="20" />
+            </template>
+          </NcAppNavigationItem>
+        </template>
+      </NcAppNavigationItem>
     </template>
 
     <template #footer>
@@ -81,6 +104,8 @@ import AlertCircle from 'vue-material-design-icons/AlertCircle.vue'
 import Bank from 'vue-material-design-icons/Bank.vue'
 import Cash from 'vue-material-design-icons/Cash.vue'
 import CreditCard from 'vue-material-design-icons/CreditCard.vue'
+import FileChart from 'vue-material-design-icons/FileChart.vue'
+import FileDocumentOutline from 'vue-material-design-icons/FileDocumentOutline.vue'
 import ViewDashboard from 'vue-material-design-icons/ViewDashboard.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -94,6 +119,7 @@ const languageCode = getLanguage()
 const moneyFormatters = new Map()
 
 const accounts = computed(() => store.state.accounts)
+const reports = computed(() => store.state.reports)
 const loading = computed(() => store.state.accountsLoading)
 const accountError = computed(() => store.state.accountsError)
 const isEncrypted = computed(() => store.state.isEncrypted)
@@ -190,6 +216,7 @@ async function initialize() {
       store.commit('setFilePath', String(queryFile))
       store.commit('setFilePassword', '')
       store.commit('setAccounts', [])
+      store.commit('setReports', [])
     }
 
     if (!store.state.filePath) {
