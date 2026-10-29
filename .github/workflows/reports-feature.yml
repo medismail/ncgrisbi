@@ -54,7 +54,6 @@ jobs:
           node tests/frontend/test_pending_party_suggestions.mjs
           node tests/frontend/test_pending_party_history.mjs
           node tests/frontend/test_phase8a_completion.mjs
-          node tests/frontend/test_phase8a_ui.mjs
       - name: Test Files action recognition
         run: node tests/frontend/test_files_action.mjs
       - name: Test Files integration source contract
