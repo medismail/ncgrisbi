@@ -61,7 +61,7 @@
             ref="partyField"
             :model-value="localDraft.partyName"
             :selected-id="localDraft.partySelectionId"
-            :items="snapshot.parties"
+            :items="availableParties"
             :recent-ids="recentSelections.party"
             label="Party"
             placeholder="Select or create a party"
@@ -279,6 +279,7 @@ import {
 const props = defineProps({
   draft: { type: Object, required: true },
   snapshot: { type: Object, required: true },
+  partyChoices: { type: Array, default: null },
   recentSelections: {
     type: Object,
     default: () => ({
@@ -319,6 +320,7 @@ watch(
 )
 
 const title = computed(() => localDraft.isNew ? 'New transaction' : 'Edit transaction')
+const availableParties = computed(() => props.partyChoices ?? props.snapshot.parties)
 const isTransfer = computed(() => normalizeName(localDraft.categoryName) === normalizeName(TRANSFER_CATEGORY))
 const categoryChoices = computed(() => [
   { id: '__transfer__', name: TRANSFER_CATEGORY, isTransfer: true, secondary: 'Account transfer' },
@@ -405,7 +407,7 @@ function isAutoFilled(field) {
 
 function partyInput(value) {
   clearFieldError('partyName')
-  updateSelectionText(localDraft, 'party', value, props.snapshot.parties)
+  updateSelectionText(localDraft, 'party', value, availableParties.value)
   completionTrace.value = null
   autoFilledFields.value = []
 }
