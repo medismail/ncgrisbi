@@ -220,4 +220,18 @@ assert.equal(
   '-23.00',
 )
 
+// Saving an unchanged existing row or editing only its date must not replace
+// the completion history of a more recent saved transaction.
+const unchanged = createResponsiveDrafts(snapshot)[0]
+applied(unchanged, {}, 8)
+assert.deepEqual(
+  snapshotWithPendingPartyHistory(snapshot, [unchanged]).completionByPartyId,
+  snapshot.completionByPartyId,
+)
+applied(unchanged, { date: '07/20/2026' }, 9)
+assert.deepEqual(
+  snapshotWithPendingPartyHistory(snapshot, [unchanged]).completionByPartyId,
+  snapshot.completionByPartyId,
+)
+
 console.log('Unsaved party completion history tests passed')
