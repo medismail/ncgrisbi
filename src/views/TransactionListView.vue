@@ -279,6 +279,7 @@
         :key="editorRowKey"
         v-model:draft="editorDraft"
         :snapshot="snapshot"
+        :completion-snapshot="completionSnapshot"
         :party-choices="partyChoices"
         :recent-selections="recentSelections"
         :auto-focus-party="editorDraft.isNew"
@@ -302,7 +303,7 @@ import TransactionEditorPanel from '@/components/transactions/TransactionEditorP
 import { snapshotAccountTotals } from '@/domain/accountTotals.mjs'
 import { sortTransactions } from '@/domain/transactionOrdering.mjs'
 import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
-import { partyChoicesWithPending } from '@/domain/pendingPartySuggestions.mjs'
+import { partyChoicesWithPending, snapshotWithPendingPartyHistory } from '@/domain/pendingPartySuggestions.mjs'
 import {
   TRANSFER_CATEGORY,
   applyEditorDraft,
@@ -354,11 +355,15 @@ const recentSelections = reactive({
   transferAccount: [], transferPayment: [],
 })
 let newSequence = 0
+let localCompletionSequence = 0
 let revertingRoute = false
 
 const partyChoices = computed(() => snapshot.value
   ? partyChoicesWithPending(snapshot.value.parties, rows.value)
   : [])
+const completionSnapshot = computed(() => snapshot.value
+  ? snapshotWithPendingPartyHistory(snapshot.value, rows.value)
+  : null)
 const orderedRows = computed(() => sortTransactions(rows.value, sortMode.value))
 const displayedRows = computed(() => orderedRows.value.filter(row => {
   if (markFilter.value === 'unchecked' && Number(row.marked) !== 0) return false
@@ -434,6 +439,7 @@ async function loadSnapshot() {
     store.commit('updateAccountTotals', snapshotAccountTotals(response.snapshot?.account))
     etag.value = response.document.etag
     rows.value = createResponsiveDrafts(response.snapshot)
+    localCompletionSequence = 0
     const loadedDisplayMode = preferredDisplayMode(response.snapshot.preferences)
     displayMode.value = loadedDisplayMode
     savedDisplayMode.value = loadedDisplayMode
@@ -515,6 +521,7 @@ async function applyActiveDraft(addAnother, draftPayload) {
   const draft = draftPayload || editorDraft.value
   if (!target || !draft) return
   applyEditorDraft(target, draft)
+  target.localCompletionOrder = ++localCompletionSequence
   clearValidationFor(target)
   closeEditorState()
   if (addAnother) addTransaction()
