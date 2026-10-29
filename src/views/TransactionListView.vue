@@ -279,6 +279,7 @@
         :key="editorRowKey"
         v-model:draft="editorDraft"
         :snapshot="snapshot"
+        :party-choices="partyChoices"
         :recent-selections="recentSelections"
         :auto-focus-party="editorDraft.isNew"
         @apply="applyActiveDraft(false, $event)"
@@ -301,6 +302,7 @@ import TransactionEditorPanel from '@/components/transactions/TransactionEditorP
 import { snapshotAccountTotals } from '@/domain/accountTotals.mjs'
 import { sortTransactions } from '@/domain/transactionOrdering.mjs'
 import { matchesTransactionSearch } from '@/domain/transactionSearch.mjs'
+import { partyChoicesWithPending } from '@/domain/pendingPartySuggestions.mjs'
 import {
   TRANSFER_CATEGORY,
   applyEditorDraft,
@@ -354,6 +356,9 @@ const recentSelections = reactive({
 let newSequence = 0
 let revertingRoute = false
 
+const partyChoices = computed(() => snapshot.value
+  ? partyChoicesWithPending(snapshot.value.parties, rows.value)
+  : [])
 const orderedRows = computed(() => sortTransactions(rows.value, sortMode.value))
 const displayedRows = computed(() => orderedRows.value.filter(row => {
   if (markFilter.value === 'unchecked' && Number(row.marked) !== 0) return false
