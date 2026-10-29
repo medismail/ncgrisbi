@@ -279,6 +279,7 @@ import {
 const props = defineProps({
   draft: { type: Object, required: true },
   snapshot: { type: Object, required: true },
+  completionSnapshot: { type: Object, default: null },
   partyChoices: { type: Array, default: null },
   recentSelections: {
     type: Object,
@@ -416,7 +417,7 @@ function partySelected(item) {
   clearFieldError('partyName')
   setSelectedItem(localDraft, 'party', item)
   remember('party', item)
-  completionTrace.value = applyPartyCompletionTrace(localDraft, props.snapshot)
+  completionTrace.value = applyPartyCompletionTrace(localDraft, props.completionSnapshot ?? props.snapshot)
   autoFilledFields.value = completionTrace.value?.fields ?? []
   onAmountDirectionChanged(localDraft, props.snapshot)
   syncSelectionIds(localDraft, props.snapshot)
