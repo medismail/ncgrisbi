@@ -12,6 +12,9 @@ on:
       - 'tests/compatibility/test_phase_a_backend.py'
       - 'tests/compatibility/test_edit_missing_references.py'
       - 'tests/frontend/test_edit_missing_references.mjs'
+      - 'tests/frontend/test_accent_search.mjs'
+      - 'tests/frontend/test_phase8a_search.mjs'
+      - 'tests/frontend/test_pending_party_suggestions.mjs'
       - 'tests/php/**'
       - '.github/workflows/reports-feature.yml'
   workflow_dispatch:
@@ -41,6 +44,12 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Test editing with missing references
         run: node tests/frontend/test_edit_missing_references.mjs
+      - name: Test accent-insensitive search and transaction search
+        run: |
+          node tests/frontend/test_accent_search.mjs
+          node tests/frontend/test_phase8a_search.mjs
+      - name: Test pending party suggestions between drafts
+        run: node tests/frontend/test_pending_party_suggestions.mjs
       - name: Test Files action recognition
         run: node tests/frontend/test_files_action.mjs
       - name: Test Files integration source contract
