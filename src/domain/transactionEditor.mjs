@@ -562,8 +562,9 @@ export function allowReconciledMutations(operations) {
 
 export function applyPartyCompletion(row, snapshot) {
   const party = partyForName(snapshot, row.partyName, row.key)
-  if (!party) return false
-  const hint = snapshot.completionByPartyId?.[String(party.id)]
+  const hint = party
+    ? snapshot.completionByPartyId?.[String(party.id)]
+    : snapshot.pendingCompletionByPartyName?.[normalizeName(row.partyName)]
   if (!hint) return false
 
   let changed = false
@@ -582,18 +583,20 @@ export function applyPartyCompletion(row, snapshot) {
       }
     } else {
       const category = snapshot.categories.find(item => String(item.id) === String(hint.categoryId))
-      if (category) {
-        row.categoryName = category.name
-        const subcategory = category.subcategories.find(item => String(item.id) === String(hint.subcategoryId))
-        if (subcategory && empty('subcategoryName')) row.subcategoryName = subcategory.name
+      const name = hint.categoryName || category?.name
+      if (name) {
+        row.categoryName = name
+        const subcategory = category?.subcategories.find(item => String(item.id) === String(hint.subcategoryId))
+        if (empty('subcategoryName')) row.subcategoryName = hint.subcategoryName || subcategory?.name || ''
         changed = true
       }
     }
   }
-  if (empty('paymentMethodName') && hint.paymentMethodId !== '0') {
+  if (empty('paymentMethodName')) {
     const method = snapshot.paymentMethods.find(item => String(item.id) === String(hint.paymentMethodId))
-    if (method) {
-      row.paymentMethodName = method.name
+    const name = hint.paymentMethodName || method?.name
+    if (name) {
+      row.paymentMethodName = name
       changed = true
     }
   }
