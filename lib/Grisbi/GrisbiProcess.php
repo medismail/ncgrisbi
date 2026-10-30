@@ -63,10 +63,20 @@ final class GrisbiProcess {
     }
 
     /** @return array<string, mixed> */
-    public function getAccountSnapshot(string $accountId, string $fileContent): array {
+    public function getAccountSnapshot(string $accountId, string $fileContent, ?string $archiveId = null): array {
         return $this->requestJson([
             'command' => 'accountSnapshot',
             'accountId' => $accountId,
+            'archiveId' => $archiveId,
+        ], $fileContent);
+    }
+
+    /** @return array<string, mixed> */
+    public function getArchivePreview(string $startDate, string $endDate, string $fileContent): array {
+        return $this->requestJson([
+            'command' => 'archivePreview',
+            'startDate' => $startDate,
+            'endDate' => $endDate,
         ], $fileContent);
     }
 
