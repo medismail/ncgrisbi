@@ -167,3 +167,17 @@ def test_large_archive_does_not_require_one_mutation_per_transaction():
     }])
     assert result.outcomes[0]["count"] == 1104
     assert len(parse_document(result.raw_bytes).root.findall("Archive")) == 1
+    archived = parse_document(result.raw_bytes)
+    first = build_account_snapshot(archived, "1", "1", 0, 100)
+    second = build_account_snapshot(archived, "1", "1", 100, 100)
+    final = build_account_snapshot(archived, "1", "1", 1100, 100)
+    assert first["Z"] == 1103  # 1102 generated rows plus original account-1 row
+    assert len(first["T"]) == len(second["T"]) == 100
+    assert len(final["T"]) == 3
+    assert first["T"][0][-1] == 1
+    assert first["a"][8] == second["a"][8]
+    assert second["a"][8] == final["a"][8]
+    with pytest.raises(MutationError, match="limit"):
+        build_account_snapshot(archived, "1", "1", 0, 1000)
+    with pytest.raises(MutationError, match="offset"):
+        build_account_snapshot(archived, "1", "1", -1, 100)
