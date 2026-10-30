@@ -76,12 +76,12 @@ export async function fetchArchivePreview({ filePath, filePassword = '', startDa
   return response.data
 }
 
-export async function fetchArchiveAccount({ accountId, archiveId, filePath, filePassword = '' }) {
+export async function fetchArchiveAccount({ accountId, archiveId, filePath, filePassword = '', offset = 0, limit = 100 }) {
   const url = generateUrl('/apps/ncgrisbi/api/editor/account/{accountId}/archive/{archiveId}', {
     accountId: String(accountId),
     archiveId: String(archiveId),
   })
-  const response = await axios.post(url, { filePath, filePassword })
+  const response = await axios.post(url, { filePath, filePassword, archiveOffset: offset, archiveLimit: limit })
   if (!response.data?.success || !response.data?.snapshot) {
     throw invalidPayload('Invalid archived transaction response.', response.data)
   }
