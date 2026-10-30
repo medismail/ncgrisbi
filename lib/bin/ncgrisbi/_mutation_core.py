@@ -709,6 +709,8 @@ class Phase6Session:
         counterpart = self.transactions.get(counterpart_id)
         if counterpart_id in ("0", "(null)") or counterpart is None or counterpart_id in self.deleted_transactions or counterpart.get("Trt", "0") != source_id:
             raise MutationError("Transaction is not a valid reciprocal transfer")
+        if counterpart.get("Ar", "0") not in ("0", "(null)", None):
+            raise MutationError("Archived transfer counterparts are read-only")
         if source.get("Cu") != counterpart.get("Cu"):
             raise MutationError("Cross-currency transfers are not yet safely editable")
         return source_id, source, counterpart_id, counterpart
