@@ -14,6 +14,7 @@ ATTRIBUTE_ORDER = MappingProxyType(
         "Party": ("Nb", "Na", "Txt", "Search", "IgnCase", "UseRegex"),
         "Category": ("Nb", "Na", "Kd"),
         "Sub_category": ("Nbc", "Nb", "Na"),
+        "Archive": ("Nb", "Na", "Bdte", "Edte", "Fye", "Rep"),
     }
 )
 
@@ -63,6 +64,7 @@ RECORD_DEFAULTS = MappingProxyType(
         ),
         "Category": MappingProxyType({"Nb": "0", "Na": "", "Kd": "0"}),
         "Sub_category": MappingProxyType({"Nbc": "0", "Nb": "0", "Na": ""}),
+        "Archive": MappingProxyType({"Nb": "0", "Na": "", "Bdte": "(null)", "Edte": "(null)", "Fye": "0", "Rep": "(null)"}),
     }
 )
 
