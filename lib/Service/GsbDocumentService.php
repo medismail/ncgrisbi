@@ -56,7 +56,8 @@ final class GsbDocumentService {
     public function getAccountSnapshot(
         string $filePath,
         string $accountId,
-        ?string $password = null
+        ?string $password = null,
+        ?string $archiveId = null
     ): array {
         $file = $this->getFile($filePath);
         $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
@@ -73,7 +74,8 @@ final class GsbDocumentService {
             $this->grisbiProcess->setPassword($password ?? '');
             $snapshot = $this->grisbiProcess->getAccountSnapshot(
                 $accountId,
-                $content
+                $content,
+                $archiveId
             );
 
             $afterReadEtag = (string)$file->getEtag();
@@ -93,6 +95,41 @@ final class GsbDocumentService {
                     $lockKey,
                     ILockingProvider::LOCK_SHARED
                 );
+            }
+        }
+    }
+
+    /**
+     * Preview archive creation under the normal shared lock and ETag check.
+     * Return counts, not transaction IDs, to keep the response compact.
+     */
+    public function getArchivePreview(
+        string $filePath,
+        string $startDate,
+        string $endDate,
+        ?string $password = null
+    ): array {
+        $file = $this->getFile($filePath);
+        $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
+        $locked = false;
+        try {
+            $this->lockingProvider->acquireLock($lockKey, ILockingProvider::LOCK_SHARED);
+            $locked = true;
+            $etag = (string)$file->getEtag();
+            $content = $file->getContent();
+            $this->grisbiProcess->setPassword($password ?? '');
+            $preview = $this->grisbiProcess->getArchivePreview($startDate, $endDate, $content);
+            $after = (string)$file->getEtag();
+            if (!hash_equals($etag, $after)) {
+                throw new DocumentConflictException($after);
+            }
+            return [
+                'document' => ['fileId' => (int)$file->getId(), 'etag' => $etag],
+                'snapshot' => $preview,
+            ];
+        } finally {
+            if ($locked) {
+                $this->lockingProvider->releaseLock($lockKey, ILockingProvider::LOCK_SHARED);
             }
         }
     }
