@@ -55,13 +55,17 @@ final class EditorController extends Controller {
         string $accountId,
         string $archiveId,
         string $filePath,
-        string $filePassword = ''
+        string $filePassword = '',
+        int $archiveOffset = 0,
+        int $archiveLimit = 100
     ): JSONResponse {
         try {
             $result = $this->documentService->getAccountSnapshot(
                 $filePath, $accountId,
                 $filePassword !== '' ? $filePassword : null,
-                $archiveId
+                $archiveId,
+                $archiveOffset,
+                $archiveLimit
             );
             return new JSONResponse([
                 'success' => true,
