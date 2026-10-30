@@ -203,6 +203,7 @@ class Phase6Session:
         self.deleted_transactions: set[str] = set()
         self.structural_touched: set[str] = set()
         self.outcomes: List[Dict[str, Any]] = []
+        self.archive_created = False
 
     @staticmethod
     def _next_id(records: Mapping[str, Any]) -> int:
@@ -990,6 +991,7 @@ class Phase6Session:
         self.new_records.append(("Archive", attrs))
         for tx_id in selection["transactionIds"]:
             self.transactions[tx_id]["Ar"] = archive_id
+        self.archive_created = True
         self._outcome(client_index, "CreateArchive", "Archive", archive_id,
                       count=selection["count"], accounts=selection["accounts"])
 
@@ -997,6 +999,8 @@ class Phase6Session:
         if not isinstance(raw, Mapping):
             raise MutationError("Every mutation operation must be a JSON object")
         operation_type = raw.get("type")
+        if self.archive_created or (operation_type == "createArchive" and client_index != 0):
+            raise MutationError("Archive creation must be the only operation in its batch")
         if not isinstance(operation_type, str):
             raise MutationError("Mutation operation type must be text")
         dispatch = {
