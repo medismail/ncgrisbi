@@ -50,6 +50,51 @@ final class EditorController extends Controller {
         }
     }
 
+    #[NoAdminRequired]
+    public function archiveAccount(
+        string $accountId,
+        string $archiveId,
+        string $filePath,
+        string $filePassword = ''
+    ): JSONResponse {
+        try {
+            $result = $this->documentService->getAccountSnapshot(
+                $filePath, $accountId,
+                $filePassword !== '' ? $filePassword : null,
+                $archiveId
+            );
+            return new JSONResponse([
+                'success' => true,
+                'document' => $result['document'],
+                'snapshot' => $result['snapshot'],
+            ]);
+        } catch (\Throwable $error) {
+            return $this->errorResponse($error);
+        }
+    }
+
+    #[NoAdminRequired]
+    public function archivePreview(
+        string $filePath,
+        string $startDate,
+        string $endDate,
+        string $filePassword = ''
+    ): JSONResponse {
+        try {
+            $result = $this->documentService->getArchivePreview(
+                $filePath, $startDate, $endDate,
+                $filePassword !== '' ? $filePassword : null
+            );
+            return new JSONResponse([
+                'success' => true,
+                'document' => $result['document'],
+                'snapshot' => $result['snapshot'],
+            ]);
+        } catch (\Throwable $error) {
+            return $this->errorResponse($error);
+        }
+    }
+
     private function errorResponse(\Throwable $error): JSONResponse {
         if ($error instanceof DocumentConflictException) {
             return new JSONResponse([
