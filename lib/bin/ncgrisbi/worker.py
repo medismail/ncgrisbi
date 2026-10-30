@@ -27,6 +27,7 @@ from .read import (
 )
 from .snapshot import build_account_snapshot
 from .report_engine import report_snapshot
+from .archive_support import date_archive_selection
 from .validator import assert_valid_document
 
 
@@ -135,7 +136,13 @@ def _read_command(
         "accountSnapshot": lambda document: build_account_snapshot(
             document,
             _account_id(header),
+            header.get("archiveId"),
         ),
+        "archivePreview": lambda document: {
+            k: v for k, v in date_archive_selection(
+                document.root, header.get("startDate"), header.get("endDate")
+            ).items() if k != "transactionIds"
+        },
     }
     handler = handlers.get(command)
     if handler is None:
