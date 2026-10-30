@@ -18,6 +18,7 @@ on:
       - 'tests/frontend/test_phase8a_search.mjs'
       - 'tests/frontend/test_pending_party_suggestions.mjs'
       - 'tests/frontend/test_pending_party_history.mjs'
+      - 'tests/frontend/test_archive_wire.mjs'
       - 'tests/php/**'
       - '.github/workflows/reports-feature.yml'
   workflow_dispatch:
@@ -56,6 +57,8 @@ jobs:
           node tests/frontend/test_pending_party_suggestions.mjs
           node tests/frontend/test_pending_party_history.mjs
           node tests/frontend/test_phase8a_completion.mjs
+      - name: Test compact archive flags
+        run: node tests/frontend/test_archive_wire.mjs
       - name: Test Files action recognition
         run: node tests/frontend/test_files_action.mjs
       - name: Test Files integration source contract
