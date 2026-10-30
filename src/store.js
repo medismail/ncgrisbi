@@ -16,6 +16,7 @@ const store = createStore({
   state: {
     accounts: [],
     reports: [],
+    archives: [],
     accountsLoading: false,
     accountsError: null,
     filePath: '',
@@ -29,6 +30,9 @@ const store = createStore({
     },
     updateAccountTotals(state, totalsByAccount) {
       state.accounts = mergeAccountTotals(state.accounts, totalsByAccount)
+    },
+    setArchives(state, archives) {
+      state.archives = Array.isArray(archives) ? archives : []
     },
     setReports(state, reports) {
       state.reports = Array.isArray(reports) ? reports : []
@@ -57,6 +61,7 @@ const store = createStore({
     },
     clearFileSession(state) {
       state.reports = []
+      state.archives = []
       state.accounts = []
       state.accountsLoading = false
       state.accountsError = null
@@ -84,10 +89,12 @@ const store = createStore({
         })
         commit('setAccounts', fileData.accounts)
         commit('setReports', fileData.reports)
+        commit('setArchives', fileData.archives ?? [])
         if (options.commitPassword) commit('setFilePassword', password)
         return fileData.accounts
       } catch (error) {
         commit('setReports', [])
+        commit('setArchives', [])
         commit('setAccounts', [])
         commit('setAccountsError', apiError(error))
         throw error
