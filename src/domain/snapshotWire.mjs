@@ -292,6 +292,7 @@ export function decodeCompactSnapshot(wire) {
     paymentMethods: paymentMethodsByAccount[account.id] ?? [],
     paymentMethodsByAccount,
     transactions,
+    archiveTotal: wire.Z == null ? null : Number(wire.Z),
     completionByPartyId,
     preferences,
     warnings,
