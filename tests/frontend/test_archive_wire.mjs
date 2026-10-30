@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { decodeCompactSnapshot } from '../../src/domain/snapshotWire.mjs'
+import { calculateTotals } from '../../src/domain/transactionEditor.mjs'
 
 const transaction = [
   '1', '01/01/2026', null, '-10.00', '1', '0', '0', '1',
@@ -8,7 +9,7 @@ const transaction = [
 ]
 const wire = {
   v: 2,
-  a: ['1', 'Current', 0, '1', 'Euro', 'EUR', '€', 2, '-10.00', '-10.00', '0.00'],
+  a: ['1', 'Current', 0, '1', 'Euro', 'EUR', '€', 2, '-10.00', '-10.00', '0.00', '-10.00', '-10.00'],
   A: [['1', 'Current', 0, '1', '1', '1', 0]],
   P: [['1', 'Shop']],
   C: [],
@@ -27,6 +28,15 @@ assert.equal(snapshot.transactions[0].protected, true)
 assert.ok(snapshot.transactions[0].protectionReasons.includes('archived'))
 assert.equal(snapshot.transactions[0].partyName, 'Shop')
 assert.equal(snapshot.account.totalAmount, '-10.00')
+assert.equal(snapshot.account.archivedBalance, '-10.00')
+assert.deepEqual(calculateTotals([], 2, '0', '-10.00', '-10.00'), {
+  totalAmount: '-10.00', totalMarkedAmount: '-10.00',
+})
+assert.deepEqual(calculateTotals([
+  { amount: '-5.00', marked: 1, deleted: false },
+], 2, '0', '-10.00', '-10.00'), {
+  totalAmount: '-15.00', totalMarkedAmount: '-15.00',
+})
 
 // The normal editor keeps a single numeric archive flag per row.
 const active = decodeCompactSnapshot({ ...wire, T: [[...transaction.slice(0, -1), 0]], Z: null })
