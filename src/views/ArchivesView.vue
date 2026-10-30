@@ -70,7 +70,7 @@
             <li v-for="account in archiveAccounts(archive)" :key="account.id">
               <button type="button" class="archive-account"
                 :aria-expanded="openKey === keyFor(archive.id, account.id)"
-                :disabled="busy || pendingChanges"
+                :disabled="busy || pendingChanges || loadingDetails"
                 @click="toggleAccount(archive.id, account.id)">
                 <span>{{ account.name }} · {{ account.count }} transactions ·
                   {{ account.amount }} {{ account.currency }}</span>
@@ -98,10 +98,11 @@
                       </table>
                     </div>
                     <div class="pagination">
-                      <span>{{ page * pageSize + 1 }}–{{ Math.min((page + 1) * pageSize, details.length) }} of {{ details.length }}</span>
-                      <button type="button" :disabled="page === 0" @click="page -= 1">Previous</button>
-                      <button type="button" :disabled="(page + 1) * pageSize >= details.length"
-                        @click="page += 1">Next</button>
+                      <span>{{ page * pageSize + 1 }}–{{ Math.min((page + 1) * pageSize, detailsTotal) }} of {{ detailsTotal }}</span>
+                      <button type="button" :disabled="page === 0 || loadingDetails"
+                        @click="loadArchivePage(archive.id, account.id, page - 1)">Previous</button>
+                      <button type="button" :disabled="(page + 1) * pageSize >= detailsTotal || loadingDetails"
+                        @click="loadArchivePage(archive.id, account.id, page + 1)">Next</button>
                     </div>
                   </template>
                 </template>
@@ -135,11 +136,12 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const openKey = ref('')
 const details = ref([])
+const detailsTotal = ref(0)
 const loadingDetails = ref(false)
 const page = ref(0)
 const pageSize = 100
 
-const visibleDetails = computed(() => details.value.slice(page.value * pageSize, (page.value + 1) * pageSize))
+const visibleDetails = computed(() => details.value)
 const previewAccounts = computed(() => Object.entries(preview.value?.accounts || {}).map(([id, data]) => ({
   id, name: accountName(id), currency: accountCurrency(id), ...data,
 })))
@@ -238,11 +240,25 @@ async function toggleAccount(archiveId, accountId) {
   openKey.value = key
   page.value = 0
   details.value = []
+  detailsTotal.value = 0
+  await loadArchivePage(archiveId, accountId, 0)
+}
+async function loadArchivePage(archiveId, accountId, nextPage) {
+  if (loadingDetails.value || nextPage < 0 || pendingChanges.value) return
+  const key = keyFor(archiveId, accountId)
+  if (openKey.value !== key) return
   errorMessage.value = ''
   loadingDetails.value = true
   try {
-    const response = await fetchArchiveAccount({ ...apiOptions(), accountId, archiveId })
-    if (openKey.value === key) details.value = response.snapshot.transactions
+    const response = await fetchArchiveAccount({
+      ...apiOptions(), accountId, archiveId,
+      offset: nextPage * pageSize, limit: pageSize,
+    })
+    if (openKey.value === key) {
+      details.value = response.snapshot.transactions
+      detailsTotal.value = response.snapshot.archiveTotal ?? 0
+      page.value = nextPage
+    }
   } catch (error) {
     errorMessage.value = apiError(error).message
     openKey.value = ''
