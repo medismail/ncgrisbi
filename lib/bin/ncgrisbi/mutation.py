@@ -137,6 +137,7 @@ class MutationSession(MutationCoreSession):
         self.deleted_transactions: set[str] = set()
         self.structural_touched: set[str] = set()
         self.outcomes: List[Dict[str, Any]] = []
+        self.archive_created = False
 
     def _new_record(self, tag: str, **values: Any) -> Dict[str, str]:
         profile = self.document.format_profile
