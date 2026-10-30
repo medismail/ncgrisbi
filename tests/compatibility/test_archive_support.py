@@ -55,6 +55,8 @@ def test_existing_archives_listed_and_normal_snapshot_omits_their_rows(version):
     assert len(normal["T"]) == 0
     assert normal["a"][8] == "-10.00"
     assert normal["a"][9] == "-10.00"
+    assert normal["a"][11] == "-10.00"
+    assert normal["a"][12] == "-10.00"
     archived = build_account_snapshot(doc, "1", "3")
     assert len(archived["T"]) == 1
     assert archived["T"][0][-1] == 1
@@ -85,6 +87,7 @@ def test_archive_mutation_is_one_atomic_write_and_keeps_totals(version):
     assert [item.get("Ar") for item in tx] == ["1", "1"]
     assert list_accounts(doc) == before
     assert build_account_snapshot(doc, "1")["T"] == []
+    assert build_account_snapshot(doc, "1")["a"][11] == "-10.00"
     assert build_account_snapshot(doc, "2")["T"] == []
     assert len(output.outcomes) == 1
     assert output.outcomes[0]["count"] == 2
