@@ -241,6 +241,8 @@ def build_account_snapshot(
     initial_balance = _decimal(account.get("Initial_balance", "0"), "Account Initial balance")
     total = initial_balance
     marked_total = Decimal("0")
+    archived_total = Decimal("0")
+    archived_marked = Decimal("0")
     transactions: List[List[Any]] = []
     archive_total = 0
     for element in transaction_elements:
@@ -254,6 +256,10 @@ def build_account_snapshot(
         if element.get("Ma", "0") in ("1", "2", "3"):
             marked_total += amount
         archive_number = element.get("Ar", "0")
+        if archive_number not in ("0", "(null)", None):
+            archived_total += amount
+            if element.get("Ma", "0") in ("1", "2", "3"):
+                archived_marked += amount
         if archive_id is None and archive_number not in ("0", "(null)", None):
             continue
         if archive_id is not None:
@@ -397,6 +403,8 @@ def build_account_snapshot(
             _format_decimal(total, precision),
             _format_decimal(marked_total, precision),
             _format_decimal(initial_balance, precision),
+            _format_decimal(archived_total, precision),
+            _format_decimal(archived_marked, precision),
         ],
         "A": accounts,
         "P": parties,
