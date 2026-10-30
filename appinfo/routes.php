@@ -8,6 +8,7 @@ return [
         ['name' => 'page#accounts', 'url' => '/accounts', 'verb' => 'GET'],
         ['name' => 'page#account', 'url' => '/account/{id}', 'verb' => 'GET'],
         ['name' => 'page#reports', 'url' => '/reports/{id}', 'verb' => 'GET'],
+        ['name' => 'page#archives', 'url' => '/archives', 'verb' => 'GET'],
         ['name' => 'page#typepass', 'url' => '/typepass', 'verb' => 'GET'],
         ['name' => 'page#file', 'url' => '/file', 'verb' => 'GET'],
 
@@ -23,6 +24,8 @@ return [
 
         // Typed editor snapshot and concurrency-safe mutation API
         ['name' => 'editor#account', 'url' => '/api/editor/account/{accountId}', 'verb' => 'POST'],
+        ['name' => 'editor#archive_account', 'url' => '/api/editor/account/{accountId}/archive/{archiveId}', 'verb' => 'POST'],
+        ['name' => 'editor#archive_preview', 'url' => '/api/archives/preview', 'verb' => 'POST'],
         ['name' => 'api#document_state', 'url' => '/api/document', 'verb' => 'POST'],
         ['name' => 'api#mutate', 'url' => '/api/mutations', 'verb' => 'POST'],
 
