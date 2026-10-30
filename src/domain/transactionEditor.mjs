@@ -650,9 +650,9 @@ export function hasPendingChanges(rows) {
   return rows.some(row => row.deleted || row.isNew || !sameEditableValues(row))
 }
 
-export function calculateTotals(rows, precision = 2, initialBalance = '0') {
-  let total = Number(initialBalance)
-  let marked = 0
+export function calculateTotals(rows, precision = 2, initialBalance = '0', archivedBalance = '0', archivedMarked = '0') {
+  let total = Number(initialBalance) + Number(archivedBalance)
+  let marked = Number(archivedMarked)
   for (const row of rows) {
     if (row.deleted) continue
     const amount = Number(row.amount)
