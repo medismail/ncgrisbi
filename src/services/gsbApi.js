@@ -66,6 +66,28 @@ export async function fetchEditorSnapshot({ accountId, filePath, filePassword })
   }
 }
 
+export async function fetchArchivePreview({ filePath, filePassword = '', startDate, endDate }) {
+  const response = await axios.post(generateUrl('/apps/ncgrisbi/api/archives/preview'), {
+    filePath, filePassword, startDate, endDate,
+  })
+  if (!response.data?.success || !response.data?.snapshot) {
+    throw invalidPayload('Invalid archive preview response.', response.data)
+  }
+  return response.data
+}
+
+export async function fetchArchiveAccount({ accountId, archiveId, filePath, filePassword = '' }) {
+  const url = generateUrl('/apps/ncgrisbi/api/editor/account/{accountId}/archive/{archiveId}', {
+    accountId: String(accountId),
+    archiveId: String(archiveId),
+  })
+  const response = await axios.post(url, { filePath, filePassword })
+  if (!response.data?.success || !response.data?.snapshot) {
+    throw invalidPayload('Invalid archived transaction response.', response.data)
+  }
+  return { ...response.data, snapshot: decodeCompactSnapshot(response.data.snapshot) }
+}
+
 export async function mutateDocument({ filePath, filePassword, baseEtag, operations }) {
   try {
     const response = await axios.post(generateUrl('/apps/ncgrisbi/api/mutations'), {
@@ -74,7 +96,7 @@ export async function mutateDocument({ filePath, filePassword, baseEtag, operati
       baseEtag,
       operations,
     })
-    showSuccess('All pending transactions were saved.')
+    showSuccess('Grisbi file changes were saved.')
     return response.data
   } catch (error) {
     const failure = apiError(error)
