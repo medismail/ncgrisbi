@@ -388,6 +388,8 @@ const totals = computed(() => calculateTotals(
   rowsWithActiveDraft(),
   snapshot.value?.account?.currency?.precision ?? 2,
   snapshot.value?.account?.initialBalance ?? '0',
+  snapshot.value?.account?.archivedBalance ?? '0',
+  snapshot.value?.account?.archivedMarkedAmount ?? '0',
 ))
 const emptyMessage = computed(() => searchQuery.value.trim()
   ? 'No transactions match this search and bank-status filter.'
