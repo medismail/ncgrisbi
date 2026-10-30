@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .errors import MutationError, RecordNotFoundError
 from .validator import warning_issues
+from .archive_support import archive_account_check
 
 _NULL_VALUES = (None, "(null)", "(NULL)")
 
@@ -106,7 +107,7 @@ def _mapped_payment_id(
     return "0"
 
 
-def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
+def build_account_snapshot(document: Any, account_id: Any, archive_id: Optional[str] = None) -> Dict[str, Any]:
     """Build the compact Phase 6 account snapshot.
 
     The optional ``U`` array carries Grisbi's saved transaction-view preferences.
@@ -115,6 +116,9 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     links; affected transactions remain visible but read-only.
     """
     account_id = _canonical_positive_id(account_id, "accountId")
+    if archive_id is not None:
+        archive_id = _canonical_positive_id(archive_id, "archiveId")
+        archive_account_check(document.root, archive_id)
     root = document.root
     general = root.find("General")
 
@@ -234,6 +238,11 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     for element in transaction_elements:
         if element.get("Ac") != account_id:
             continue
+        archive_number = element.get("Ar", "0")
+        if archive_id is None and archive_number not in ("0", "(null)", None):
+            continue
+        if archive_id is not None and archive_number != archive_id:
+            continue
         attributes = dict(element.attrib)
         transaction_id = attributes.get("Nb") or ""
         amount = _decimal(
@@ -287,6 +296,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
                 flags,
                 target_account_id,
                 target_payment_id,
+                1 if archive_number not in ("0", "(null)", None) else 0,
             ]
         )
 
@@ -296,6 +306,8 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     other_history: Dict[str, Any] = {}
     for element in transaction_elements:
         party_id = element.get("Pa", "0")
+        if element.get("Ar", "0") not in ("0", "(null)", None):
+            continue
         if party_id in ("0", "(null)") or element.get("Mo", "0") not in (
             "0",
             "(null)",
