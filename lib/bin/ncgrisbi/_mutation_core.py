@@ -18,6 +18,7 @@ from .errors import (
 from .parser import parse_document
 from .validator import assert_valid_document, warning_issues
 from .writer import LosslessPatchWriter
+from .archive_support import date_archive_selection
 
 NULLS = (None, "", "0", "(null)", "(NULL)")
 _WS_RE = re.compile(r"\s+", re.UNICODE)
@@ -196,6 +197,9 @@ class Phase6Session:
 
         self.new_records: List[Tuple[str, Dict[str, str]]] = []
         self.new_transaction_ids: List[str] = []
+        self.archives = {element.get("Nb"): dict(element.attrib)
+                         for element in document.root.findall("Archive") if element.get("Nb")}
+        self.next_archive = self._next_id(self.archives)
         self.deleted_transactions: set[str] = set()
         self.structural_touched: set[str] = set()
         self.outcomes: List[Dict[str, Any]] = []
@@ -604,6 +608,8 @@ class Phase6Session:
         transaction = self.transactions.get(transaction_id)
         if transaction is None or transaction_id in self.deleted_transactions:
             raise RecordNotFoundError("Transaction %s does not exist" % transaction_id)
+        if transaction.get("Ar", "0") not in ("0", "(null)", None):
+            raise MutationError("Archived transactions are read-only; view them in Archives")
         return transaction_id, transaction
 
     def update_transaction(self, raw: Mapping[str, Any], client_index: int) -> None:
@@ -961,6 +967,32 @@ class Phase6Session:
                 changed += 1
         self._outcome(client_index, "SetTransactionMarks", "Transaction", "*", "mark-batch", count=len(marks), changedCount=changed)
 
+    def create_archive(self, raw: Mapping[str, Any], client_index: int) -> None:
+        _strict_fields(raw, ("name", "startDate", "endDate"))
+        name = _clean_name(_required(raw, "name"), "Archive")
+        if any(name.casefold() == (archive.get("Na") or "").casefold()
+               for archive in self.archives.values()):
+            raise MutationError("An archive with this name already exists")
+        selection = date_archive_selection(
+            self.document.root,
+            _required(raw, "startDate"),
+            _required(raw, "endDate"),
+        )
+        # Do not combine archive creation and structural transaction mutations.
+        if self.structural_touched or self.new_transaction_ids or self.deleted_transactions:
+            raise MutationError("Archive creation must be a separate mutation batch")
+        archive_id = str(self.next_archive)
+        self.next_archive += 1
+        attrs = self.document.format_profile.defaults_for("Archive")
+        attrs.update({"Nb": archive_id, "Na": name,
+                      "Bdte": selection["startDate"], "Edte": selection["endDate"]})
+        self.archives[archive_id] = attrs
+        self.new_records.append(("Archive", attrs))
+        for tx_id in selection["transactionIds"]:
+            self.transactions[tx_id]["Ar"] = archive_id
+        self._outcome(client_index, "CreateArchive", "Archive", archive_id,
+                      count=selection["count"], accounts=selection["accounts"])
+
     def apply(self, raw: Mapping[str, Any], client_index: int) -> None:
         if not isinstance(raw, Mapping):
             raise MutationError("Every mutation operation must be a JSON object")
@@ -971,6 +1003,7 @@ class Phase6Session:
             "createParty": self.create_party,
             "createCategory": self.create_category,
             "createSubcategory": self.create_subcategory,
+            "createArchive": self.create_archive,
             "createTransaction": self.create_transaction,
             "updateTransaction": self.update_transaction,
             "deleteTransaction": self.delete_transaction,
@@ -1020,6 +1053,8 @@ class Phase6Session:
             }
             if changed_keys == {"Ma"}:
                 writer.replace_attribute(span, "Ma", current["Ma"])
+            elif changed_keys == {"Ar"}:
+                writer.replace_attribute(span, "Ar", current["Ar"])
             else:
                 writer.replace_record(span, current)
             changed_records += 1
