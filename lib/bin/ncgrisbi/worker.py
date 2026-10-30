@@ -137,6 +137,8 @@ def _read_command(
             document,
             _account_id(header),
             header.get("archiveId"),
+            header.get("archiveOffset", 0),
+            header.get("archiveLimit", 100),
         ),
         "archivePreview": lambda document: {
             k: v for k, v in date_archive_selection(
