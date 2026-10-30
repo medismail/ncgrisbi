@@ -238,20 +238,19 @@ def build_account_snapshot(document: Any, account_id: Any, archive_id: Optional[
     for element in transaction_elements:
         if element.get("Ac") != account_id:
             continue
+        # Totals always include archived transactions. The archive filter
+        # controls only the rows returned to the browser, never the balance.
+        transaction_id = element.get("Nb") or ""
+        amount = _decimal(element.get("Am"), "Transaction %s amount" % transaction_id)
+        total += amount
+        if element.get("Ma", "0") in ("1", "2", "3"):
+            marked_total += amount
         archive_number = element.get("Ar", "0")
         if archive_id is None and archive_number not in ("0", "(null)", None):
             continue
         if archive_id is not None and archive_number != archive_id:
             continue
         attributes = dict(element.attrib)
-        transaction_id = attributes.get("Nb") or ""
-        amount = _decimal(
-            attributes.get("Am"),
-            "Transaction %s amount" % transaction_id,
-        )
-        total += amount
-        if attributes.get("Ma", "0") in ("1", "2", "3"):
-            marked_total += amount
 
         transfer_id = attributes.get("Trt", "0")
         target_account_id: Optional[str] = None
