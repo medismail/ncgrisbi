@@ -21,9 +21,10 @@ _TX_TARGET_PAYMENT_METHOD_ID = 18
 
 def build_account_snapshot(
     document: Any, account_id: Any, archive_id: Any = None,
+    archive_offset: int = 0, archive_limit: int = 100,
 ) -> Dict[str, Any]:
     """Build normal editor rows or archived rows on demand."""
-    snapshot = _build_account_snapshot(document, account_id, archive_id)
+    snapshot = _build_account_snapshot(document, account_id, archive_id, archive_offset, archive_limit)
     if archive_id is not None:
         snapshot["H"] = []  # Archived rows never contribute edit completion.
         return snapshot
