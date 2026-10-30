@@ -11,11 +11,14 @@ on:
       - 'tests/compatibility/test_reports.py'
       - 'tests/compatibility/test_phase_a_backend.py'
       - 'tests/compatibility/test_edit_missing_references.py'
+      - 'tests/compatibility/test_subcategory_insertion.py'
+      - 'tests/compatibility/test_archive_support.py'
       - 'tests/frontend/test_edit_missing_references.mjs'
       - 'tests/frontend/test_accent_search.mjs'
       - 'tests/frontend/test_phase8a_search.mjs'
       - 'tests/frontend/test_pending_party_suggestions.mjs'
       - 'tests/frontend/test_pending_party_history.mjs'
+      - 'tests/frontend/test_archive_wire.mjs'
       - 'tests/php/**'
       - '.github/workflows/reports-feature.yml'
   workflow_dispatch:
@@ -33,7 +36,7 @@ jobs:
       - name: Compile Python backend
         run: python -m compileall -q lib/bin/ncgrisbi
       - name: Run read-model, report and existing-transaction edit contracts
-        run: python -m pytest -q tests/compatibility/test_phase_a_backend.py tests/compatibility/test_reports.py tests/compatibility/test_edit_missing_references.py
+        run: python -m pytest -q tests/compatibility/test_phase_a_backend.py tests/compatibility/test_reports.py tests/compatibility/test_edit_missing_references.py tests/compatibility/test_subcategory_insertion.py tests/compatibility/test_archive_support.py
       - name: Lint PHP files
         run: find lib appinfo tests/php -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run shared-lock PHP service contract
@@ -54,6 +57,8 @@ jobs:
           node tests/frontend/test_pending_party_suggestions.mjs
           node tests/frontend/test_pending_party_history.mjs
           node tests/frontend/test_phase8a_completion.mjs
+      - name: Test compact archive flags
+        run: node tests/frontend/test_archive_wire.mjs
       - name: Test Files action recognition
         run: node tests/frontend/test_files_action.mjs
       - name: Test Files integration source contract

@@ -20,6 +20,7 @@ const TX = {
   flags: 16,
   targetAccountId: 17,
   targetPaymentMethodId: 18,
+  archive: 19,
 }
 
 const FLAG_BREAKDOWN = 1
@@ -98,6 +99,8 @@ export function decodeCompactSnapshot(wire) {
     totalAmount: String(wire.a[8] ?? '0'),
     totalMarkedAmount: String(wire.a[9] ?? '0'),
     initialBalance: String(wire.a[10] ?? '0'),
+    archivedBalance: String(wire.a[11] ?? '0'),
+    archivedMarkedAmount: String(wire.a[12] ?? '0'),
   }
 
   const transactions = (wire.T ?? []).map(item => {
@@ -128,9 +131,12 @@ export function decodeCompactSnapshot(wire) {
     if (splitChild) protectionReasons.push('split-child')
     if (brokenTransfer) protectionReasons.push('broken-transfer')
     if (crossCurrency) protectionReasons.push('cross-currency-transfer')
+    const ar = Number(item[TX.archive] ?? 0) ? 1 : 0
+    if (ar) protectionReasons.push('archived')
 
     return {
       id: String(item[TX.id]),
+      ar,
       date: item[TX.date] ?? '',
       valueDate: item[TX.valueDate] ?? null,
       amount: String(item[TX.amount] ?? '0'),
@@ -288,6 +294,7 @@ export function decodeCompactSnapshot(wire) {
     paymentMethods: paymentMethodsByAccount[account.id] ?? [],
     paymentMethodsByAccount,
     transactions,
+    archiveTotal: wire.Z == null ? null : Number(wire.Z),
     completionByPartyId,
     preferences,
     warnings,

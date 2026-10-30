@@ -130,11 +130,14 @@ class MutationSession(MutationCoreSession):
         self.next_category = self._next_id(self.categories)
         self.next_transaction = self._next_id(self.transactions)
         self.next_subcategories: Dict[str, int] = {}
+        self.archives = {element.get('Nb'): dict(element.attrib) for element in document.root.findall('Archive') if element.get('Nb')}
+        self.next_archive = self._next_id(self.archives)
         self.new_records: List[Tuple[str, Dict[str, str]]] = []
         self.new_transaction_ids: List[str] = []
         self.deleted_transactions: set[str] = set()
         self.structural_touched: set[str] = set()
         self.outcomes: List[Dict[str, Any]] = []
+        self.archive_created = False
 
     def _new_record(self, tag: str, **values: Any) -> Dict[str, str]:
         profile = self.document.format_profile

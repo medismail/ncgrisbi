@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .errors import MutationError, RecordNotFoundError
 from .model import GsbDocument
+from .archive_support import archive_rows
 
 
 ACCOUNT_TYPES = {
@@ -179,6 +180,7 @@ def list_accounts_with_reports(document: GsbDocument) -> Dict[str, Any]:
     context = _ReadContext(document)
     return {
         "accounts": list_accounts(document, context),
+        "archives": archive_rows(document.root),
         "reports": [
             {"id": report.get("Nb"), "name": report.get("Name") or ""}
             for report in context.report_rows
@@ -353,6 +355,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
                 "PMC": transaction.get("Pc"),
                 "Ma": _numeric(transaction.get("Ma")),
                 "STx": transaction.get("Trt"),
+                "ar": 0 if transaction.get("Ar", "0") in _NULLS else 1,
             }
         )
 

@@ -58,7 +58,10 @@
     </template>
 
     <template #footer>
-      <NcButton @click="closeFile">Close file</NcButton>
+      <div class="file-actions">
+        <NcButton :disabled="loading" @click="openArchives">Archives</NcButton>
+        <NcButton @click="closeFile">Close file</NcButton>
+      </div>
     </template>
   </NcAppNavigation>
 
@@ -164,6 +167,10 @@ async function openOverview() {
   if (route.name !== 'Accounts') await router.push({ name: 'Accounts' })
 }
 
+async function openArchives() {
+  if (route.name !== 'Archives') await router.push({ name: 'Archives' })
+}
+
 async function closeFile() {
   if (store.state.transactionPending.active
     && !window.confirm(pendingDiscardPrompt('Close the current Grisbi file?'))) {
@@ -217,6 +224,7 @@ async function initialize() {
       store.commit('setFilePassword', '')
       store.commit('setAccounts', [])
       store.commit('setReports', [])
+      store.commit('setArchives', [])
     }
 
     if (!store.state.filePath) {
@@ -247,4 +255,5 @@ onMounted(initialize)
 .shell-state { display: grid; place-items: center; align-content: center; gap: 10px; min-height: 260px; }
 .shell-state p { margin: 0; }
 .error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.file-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 </style>

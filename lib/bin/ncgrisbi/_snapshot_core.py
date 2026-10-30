@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .errors import MutationError, RecordNotFoundError
 from .validator import warning_issues
+from .archive_support import archive_account_check
 
 _NULL_VALUES = (None, "(null)", "(NULL)")
 
@@ -106,7 +107,10 @@ def _mapped_payment_id(
     return "0"
 
 
-def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
+def build_account_snapshot(
+    document: Any, account_id: Any, archive_id: Optional[str] = None,
+    archive_offset: int = 0, archive_limit: int = 100,
+) -> Dict[str, Any]:
     """Build the compact Phase 6 account snapshot.
 
     The optional ``U`` array carries Grisbi's saved transaction-view preferences.
@@ -115,6 +119,13 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     links; affected transactions remain visible but read-only.
     """
     account_id = _canonical_positive_id(account_id, "accountId")
+    if archive_id is not None:
+        archive_id = _canonical_positive_id(archive_id, "archiveId")
+        archive_account_check(document.root, archive_id)
+        if not isinstance(archive_offset, int) or isinstance(archive_offset, bool) or archive_offset < 0:
+            raise MutationError("Archive offset must be a non-negative integer")
+        if not isinstance(archive_limit, int) or isinstance(archive_limit, bool) or not 1 <= archive_limit <= 200:
+            raise MutationError("Archive page limit must be between 1 and 200")
     root = document.root
     general = root.find("General")
 
@@ -230,19 +241,34 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     initial_balance = _decimal(account.get("Initial_balance", "0"), "Account Initial balance")
     total = initial_balance
     marked_total = Decimal("0")
+    archived_total = Decimal("0")
+    archived_marked = Decimal("0")
     transactions: List[List[Any]] = []
+    archive_total = 0
     for element in transaction_elements:
         if element.get("Ac") != account_id:
             continue
-        attributes = dict(element.attrib)
-        transaction_id = attributes.get("Nb") or ""
-        amount = _decimal(
-            attributes.get("Am"),
-            "Transaction %s amount" % transaction_id,
-        )
+        # Totals always include archived transactions. The archive filter
+        # controls only the rows returned to the browser, never the balance.
+        transaction_id = element.get("Nb") or ""
+        amount = _decimal(element.get("Am"), "Transaction %s amount" % transaction_id)
         total += amount
-        if attributes.get("Ma", "0") in ("1", "2", "3"):
+        if element.get("Ma", "0") in ("1", "2", "3"):
             marked_total += amount
+        archive_number = element.get("Ar", "0")
+        if archive_number not in ("0", "(null)", None):
+            archived_total += amount
+            if element.get("Ma", "0") in ("1", "2", "3"):
+                archived_marked += amount
+        if archive_id is None and archive_number not in ("0", "(null)", None):
+            continue
+        if archive_id is not None:
+            if archive_number != archive_id:
+                continue
+            archive_total += 1
+            if archive_total <= archive_offset or archive_total > archive_offset + archive_limit:
+                continue
+        attributes = dict(element.attrib)
 
         transfer_id = attributes.get("Trt", "0")
         target_account_id: Optional[str] = None
@@ -287,6 +313,7 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
                 flags,
                 target_account_id,
                 target_payment_id,
+                1 if archive_number not in ("0", "(null)", None) else 0,
             ]
         )
 
@@ -296,6 +323,8 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
     other_history: Dict[str, Any] = {}
     for element in transaction_elements:
         party_id = element.get("Pa", "0")
+        if element.get("Ar", "0") not in ("0", "(null)", None):
+            continue
         if party_id in ("0", "(null)") or element.get("Mo", "0") not in (
             "0",
             "(null)",
@@ -374,6 +403,8 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
             _format_decimal(total, precision),
             _format_decimal(marked_total, precision),
             _format_decimal(initial_balance, precision),
+            _format_decimal(archived_total, precision),
+            _format_decimal(archived_marked, precision),
         ],
         "A": accounts,
         "P": parties,
@@ -383,4 +414,5 @@ def build_account_snapshot(document: Any, account_id: Any) -> Dict[str, Any]:
         "H": histories,
         "U": preferences,
         "W": warnings,
+        "Z": archive_total if archive_id is not None else None,
     }
