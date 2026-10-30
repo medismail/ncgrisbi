@@ -57,7 +57,9 @@ final class GsbDocumentService {
         string $filePath,
         string $accountId,
         ?string $password = null,
-        ?string $archiveId = null
+        ?string $archiveId = null,
+        int $archiveOffset = 0,
+        int $archiveLimit = 100
     ): array {
         $file = $this->getFile($filePath);
         $lockKey = 'ncgrisbi:document:' . (string)$file->getId();
@@ -75,7 +77,9 @@ final class GsbDocumentService {
             $snapshot = $this->grisbiProcess->getAccountSnapshot(
                 $accountId,
                 $content,
-                $archiveId
+                $archiveId,
+                $archiveOffset,
+                $archiveLimit
             );
 
             $afterReadEtag = (string)$file->getEtag();
