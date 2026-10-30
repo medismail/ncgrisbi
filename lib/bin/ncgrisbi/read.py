@@ -355,6 +355,7 @@ def list_transactions(document: GsbDocument, account_id: str) -> Dict[str, Any]:
                 "PMC": transaction.get("Pc"),
                 "Ma": _numeric(transaction.get("Ma")),
                 "STx": transaction.get("Trt"),
+                "ar": 0 if transaction.get("Ar", "0") in _NULLS else 1,
             }
         )
 
