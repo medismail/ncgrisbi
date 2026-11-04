@@ -1023,9 +1023,50 @@ class Phase6Session:
             else:
                 writer.replace_record(span, current)
             changed_records += 1
+        # Categories and subcategories share a section rank in the GSB
+        # profile, but their physical records must stay grouped by Nbc.
+        # Anchors refer to the original byte spans, so place children of
+        # existing parents first; then place newly created categories and
+        # their children together at the section's original insertion point.
+        last_subcategory_span: Dict[str, Any] = {}
+        for element, span in zip(
+            self.document.root.findall("Sub_category"),
+            self.document.spans_for("Sub_category"),
+        ):
+            last_subcategory_span[element.get("Nbc", "")] = span
+        category_spans = {
+            element.get("Nb", ""): span
+            for element, span in zip(
+                self.document.root.findall("Category"),
+                self.document.spans_for("Category"),
+            )
+        }
+        new_categories = {
+            attrs["Nb"] for tag, attrs in self.new_records if tag == "Category"
+        }
+        new_subcategories: Dict[str, List[Dict[str, str]]] = {}
         for tag, attrs in self.new_records:
+            if tag != "Sub_category":
+                continue
+            parent_id = attrs["Nbc"]
+            if parent_id in new_categories:
+                new_subcategories.setdefault(parent_id, []).append(attrs)
+                continue
+            anchor = last_subcategory_span.get(parent_id) or category_spans.get(parent_id)
+            if anchor is None:
+                raise MutationError("Missing insertion anchor for category %s" % parent_id)
+            writer.insert_record(tag, attrs, after=anchor)
+            changed_records += 1
+
+        for tag, attrs in self.new_records:
+            if tag == "Sub_category":
+                continue
             writer.insert_record(tag, attrs)
             changed_records += 1
+            if tag == "Category":
+                for child in new_subcategories.get(attrs["Nb"], []):
+                    writer.insert_record("Sub_category", child)
+                    changed_records += 1
         for transaction_id in self.new_transaction_ids:
             if transaction_id not in self.deleted_transactions:
                 current = self.transactions[transaction_id]

@@ -11,6 +11,7 @@ on:
       - 'tests/compatibility/test_reports.py'
       - 'tests/compatibility/test_phase_a_backend.py'
       - 'tests/compatibility/test_edit_missing_references.py'
+      - 'tests/compatibility/test_subcategory_insertion.py'
       - 'tests/frontend/test_edit_missing_references.mjs'
       - 'tests/frontend/test_accent_search.mjs'
       - 'tests/frontend/test_phase8a_search.mjs'
@@ -33,7 +34,7 @@ jobs:
       - name: Compile Python backend
         run: python -m compileall -q lib/bin/ncgrisbi
       - name: Run read-model, report and existing-transaction edit contracts
-        run: python -m pytest -q tests/compatibility/test_phase_a_backend.py tests/compatibility/test_reports.py tests/compatibility/test_edit_missing_references.py
+        run: python -m pytest -q tests/compatibility/test_phase_a_backend.py tests/compatibility/test_reports.py tests/compatibility/test_edit_missing_references.py tests/compatibility/test_subcategory_insertion.py
       - name: Lint PHP files
         run: find lib appinfo tests/php -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run shared-lock PHP service contract
